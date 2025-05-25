@@ -199,25 +199,25 @@ class GateItem(QGraphicsItem):
             for wire in point.connected_wires:
                 wire.update_position()
     
-    def get_tikz_code(self):
+    def get_tikz_code(self, gate_id):
         """Generate TikZ code for this gate"""
         x, y = self.pos().x() / 50, -self.pos().y() / 50
         
         # Map gate types to TikZ library names
         tikz_gates = {
-            "AND": "and gate",
-            "OR": "or gate", 
-            "NOT": "not gate",
-            "NAND": "nand gate",
-            "NOR": "nor gate",
-            "XOR": "xor gate",
-            "XNOR": "xnor gate"
+            "AND": "and gate US",
+            "OR": "or gate US", 
+            "NOT": "not gate US",
+            "NAND": "nand gate US",
+            "NOR": "nor gate US",
+            "XOR": "xor gate US",
+            "XNOR": "xnor gate US"
         }
         
-        gate_name = tikz_gates.get(self.gate_type, "and gate")
-        inputs_spec = f"inputs={self.num_inputs}" if self.num_inputs > 2 else ""
+        gate_name = tikz_gates.get(self.gate_type, "and gate US")
+        inputs_spec = f", inputs={self.num_inputs}" if self.num_inputs > 2 else ""
         
-        return f"\\node[{gate_name}, {inputs_spec}] at ({x:.2f}, {y:.2f}) {{}};"
+        return f"    \\node[{gate_name}, draw{inputs_spec}] ({gate_id}) at ({x:.2f}, {y:.2f}) {{}};"
 
 
 class WireItem(QGraphicsItem):
@@ -261,18 +261,16 @@ class WireItem(QGraphicsItem):
         self.prepareGeometryChange()
         self.update()
     
-    def get_tikz_code(self):
-        """Generate TikZ code for this wire"""
+    def get_tikz_code(self, start_gate_id, end_gate_id, start_pin, end_pin):
+        """Generate TikZ code for this wire using gate references"""
         if not (self.start_connection and self.end_connection):
             return ""
-            
-        start_pos = self.start_connection.get_scene_pos()
-        end_pos = self.end_connection.get_scene_pos()
         
-        x1, y1 = start_pos.x() / 50, -start_pos.y() / 50
-        x2, y2 = end_pos.x() / 50, -end_pos.y() / 50
+        # Determine pin references
+        start_ref = f"{start_gate_id}.output" if self.start_connection.point_type == 'output' else f"{start_gate_id}.input {self.start_connection.index + 1}"
+        end_ref = f"{end_gate_id}.input {self.end_connection.index + 1}" if self.end_connection.point_type == 'input' else f"{end_gate_id}.output"
         
-        return f"\\draw ({x1:.2f}, {y1:.2f}) -- ({x2:.2f}, {y2:.2f});"
+        return f"    \\draw ({start_ref}) -- ({end_ref});"
 
 
 class CircuitCanvas(QGraphicsView):
@@ -360,38 +358,110 @@ class CircuitCanvas(QGraphicsView):
     def get_all_tikz_code(self):
         """Generate TikZ code for all items in the scene"""
         tikz_code = []
-        tikz_code.append("\\begin{tikzpicture}[circuit logic US]")
+        tikz_code.append("\\documentclass[tikz, border=15pt]{standalone}")
+        tikz_code.append("\\usetikzlibrary{positioning, shapes.gates.logic.US, calc}")
+        tikz_code.append("\\usepackage{amsmath}")
+        tikz_code.append("\\newcommand{\\splitmark}[2]{(#1) node[circle, fill, inner sep= 0pt, outer sep= 0pt, minimum size= 2*#2]{}}")
+        tikz_code.append("\\begin{document}")
+        tikz_code.append("\\begin{tikzpicture}")
         
-        for item in self.scene.items():
-            if isinstance(item, GateItem):
-                tikz_code.append(item.get_tikz_code())
-            elif isinstance(item, WireItem):
-                tikz_code.append(item.get_tikz_code())
+        # Generate gates with IDs
+        gates = [item for item in self.scene.items() if isinstance(item, GateItem)]
+        wires = [item for item in self.scene.items() if isinstance(item, WireItem)]
+        
+        # Create gate ID mapping
+        gate_id_map = {}
+        for i, gate in enumerate(gates):
+            gate_id = f"{gate.gate_type.lower()}{i+1}" if i > 0 or len([g for g in gates if g.gate_type == gate.gate_type]) > 1 else gate.gate_type.lower()
+            gate_id_map[gate] = gate_id
+        
+        # Add gates section
+        if gates:
+            tikz_code.append("    %Gates")
+            for gate in gates:
+                gate_id = gate_id_map[gate]
+                tikz_code.append(gate.get_tikz_code(gate_id))
+        
+        # Add connections section
+        if wires:
+            tikz_code.append("    ")
+            tikz_code.append("    %Connections")
+            for wire in wires:
+                if wire.start_connection and wire.end_connection:
+                    start_gate = wire.start_connection.parent_gate
+                    end_gate = wire.end_connection.parent_gate
+                    if start_gate in gate_id_map and end_gate in gate_id_map:
+                        start_gate_id = gate_id_map[start_gate]
+                        end_gate_id = gate_id_map[end_gate]
+                        tikz_code.append(wire.get_tikz_code(start_gate_id, end_gate_id, 
+                                                           wire.start_connection.index, 
+                                                           wire.end_connection.index))
         
         tikz_code.append("\\end{tikzpicture}")
+        tikz_code.append("\\end{document}")
         return "\n".join(tikz_code)
     
     def generate_complete_document(self):
         """Generate a complete LaTeX document with the circuit"""
-        doc = Document(geometry_options={"margin": "1in"})
+        doc = Document(documentclass='standalone', 
+                      document_options=['tikz', 'border=15pt'])
         
-        # Add required packages
-        doc.packages.append(Command('usepackage', 'circuitikz'))
+        # Add required packages and libraries
+        doc.packages.append(Command('usetikzlibrary', 'positioning, shapes.gates.logic.US, calc'))
+        doc.packages.append(Command('usepackage', 'amsmath'))
         
-        with doc.create(TikZ(options=['circuit logic US'])) as tikz:
-            # Add all gates and wires
-            for item in self.scene.items():
-                if isinstance(item, GateItem):
-                    tikz.append(Command('node', 
-                        options=[item.get_tikz_code().split('[')[1].split(']')[0]],
-                        arguments=[f"({item.pos().x()/50:.2f}, {-item.pos().y()/50:.2f})"],
-                        extra_arguments="{}"))
-                elif isinstance(item, WireItem):
-                    if item.start_connection and item.end_connection:
-                        start_pos = item.start_connection.get_scene_pos()
-                        end_pos = item.end_connection.get_scene_pos()
-                        tikz.append(Command('draw',
-                            arguments=[f"({start_pos.x()/50:.2f}, {-start_pos.y()/50:.2f}) -- ({end_pos.x()/50:.2f}, {-end_pos.y()/50:.2f})"]))
+        # Add custom command for split marks
+        doc.append(Command('newcommand', 
+                          arguments=[Command('splitmark'), '[2]'],
+                          extra_arguments='(#1) node[circle, fill, inner sep= 0pt, outer sep= 0pt, minimum size= 2*#2]{}'))
+        
+        # Generate the circuit content
+        gates = [item for item in self.scene.items() if isinstance(item, GateItem)]
+        wires = [item for item in self.scene.items() if isinstance(item, WireItem)]
+        
+        # Create gate ID mapping
+        gate_id_map = {}
+        for i, gate in enumerate(gates):
+            gate_id = f"{gate.gate_type.lower()}{i+1}" if i > 0 or len([g for g in gates if g.gate_type == gate.gate_type]) > 1 else gate.gate_type.lower()
+            gate_id_map[gate] = gate_id
+        
+        with doc.create(TikZ()) as tikz:
+            # Add gates
+            for gate in gates:
+                gate_id = gate_id_map[gate]
+                x, y = gate.pos().x() / 50, -gate.pos().y() / 50
+                
+                tikz_gates = {
+                    "AND": "and gate US",
+                    "OR": "or gate US", 
+                    "NOT": "not gate US",
+                    "NAND": "nand gate US",
+                    "NOR": "nor gate US",
+                    "XOR": "xor gate US",
+                    "XNOR": "xnor gate US"
+                }
+                
+                gate_name = tikz_gates.get(gate.gate_type, "and gate US")
+                inputs_spec = f", inputs={gate.num_inputs}" if gate.num_inputs > 2 else ""
+                
+                tikz.append(Command('node', 
+                                  options=[f'{gate_name}, draw{inputs_spec}'],
+                                  arguments=[f'({gate_id})'],
+                                  extra_arguments=f'at ({x:.2f}, {y:.2f}) {{}}'))
+            
+            # Add connections
+            for wire in wires:
+                if wire.start_connection and wire.end_connection:
+                    start_gate = wire.start_connection.parent_gate
+                    end_gate = wire.end_connection.parent_gate
+                    if start_gate in gate_id_map and end_gate in gate_id_map:
+                        start_gate_id = gate_id_map[start_gate]
+                        end_gate_id = gate_id_map[end_gate]
+                        
+                        start_ref = f"{start_gate_id}.output" if wire.start_connection.point_type == 'output' else f"{start_gate_id}.input {wire.start_connection.index + 1}"
+                        end_ref = f"{end_gate_id}.input {wire.end_connection.index + 1}" if wire.end_connection.point_type == 'input' else f"{end_gate_id}.output"
+                        
+                        tikz.append(Command('draw', arguments=[f'({start_ref}) -- ({end_ref})']))
         
         return doc
 

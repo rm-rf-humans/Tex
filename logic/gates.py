@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QTextEdit, QSplitter, QFileDialog, QMessageBox, QGroupBox,
                              QFormLayout, QComboBox, QGraphicsEllipseItem, QGraphicsPolygonItem,
                              QGraphicsPathItem)
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer, QPointF
 from PyQt5.QtGui import QPen, QBrush, QColor, QFont, QPainter, QPixmap, QPolygonF, QPainterPath, QPainterPathStroker
 from pylatex import Document, TikZ, Command
 from pylatex.tikz import TikZNode, TikZDraw
@@ -867,6 +867,8 @@ class CircuitCanvas(QGraphicsView):
         
         # Enable mouse tracking for preview wire
         self.setMouseTracking(True)
+
+        self.shift_pressed = False
         
     def set_tool(self, tool):
         """Set the current drawing tool"""
@@ -912,7 +914,20 @@ class CircuitCanvas(QGraphicsView):
                         self.cancel_connection()
                 elif self.connecting:
                     # Create junction at mouse position
-                    junction = JunctionPoint(scene_pos.x(), scene_pos.y())
+                    if self.shift_pressed:
+                        start_pos = self.start_connection_point.scenePos()
+                        dx = scene_pos.x() - start_pos.x()
+                        dy = scene_pos.y() - start_pos.y()
+                        
+                        if abs(dx) > abs(dy):
+                            junction_pos = QPointF(scene_pos.x(), start_pos.y())
+                        else:
+                            junction_pos = QPointF(start_pos.x(), scene_pos.y())
+                        
+                        junction = JunctionPoint(junction_pos.x(), junction_pos.y())
+                    else:
+                        junction = JunctionPoint(scene_pos.x(), scene_pos.y())                    
+                        
                     self.scene.addItem(junction)
                     
                     # Connect start point to junction
@@ -940,19 +955,45 @@ class CircuitCanvas(QGraphicsView):
                 self.scene.addItem(gate)
     
     def mouseMoveEvent(self, event):
-        """Handle mouse move for preview wire"""
         if self.connecting and self.preview_wire:
             scene_pos = self.mapToScene(event.pos())
-            self.preview_wire.update_end_pos(scene_pos)
+            
+            # Check if shift is pressed for orthogonal routing
+            if self.shift_pressed:
+                start_pos = self.start_connection_point.scenePos()
+                
+                # Calculate orthogonal position
+                dx = scene_pos.x() - start_pos.x()
+                dy = scene_pos.y() - start_pos.y()
+                
+                # Choose the dominant direction
+                if abs(dx) > abs(dy):
+                    # Horizontal first
+                    ortho_pos = QPointF(scene_pos.x(), start_pos.y())
+                else:
+                    # Vertical first  
+                    ortho_pos = QPointF(start_pos.x(), scene_pos.y())
+                
+                self.preview_wire.update_end_pos(ortho_pos)
+            else:
+                self.preview_wire.update_end_pos(scene_pos)
         
         super().mouseMoveEvent(event)
-    
+
     def keyPressEvent(self, event):
         """Handle key presses"""
         if event.key() == Qt.Key_Escape:
             self.cancel_connection()
+        elif event.key() == Qt.Key_Shift:
+            self.shift_pressed = True
         super().keyPressEvent(event)
     
+    def keyReleaseEvent(self, event):
+        """Handle key releases"""
+        if event.key() == Qt.Key_Shift:
+            self.shift_pressed = False
+        super().keyReleaseEvent(event)
+
     def is_valid_connection(self, point1, point2):
         """Enhanced connection validation"""
         # Can't connect point to itself

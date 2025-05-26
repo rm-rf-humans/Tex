@@ -13,12 +13,10 @@ class MainApp(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         # Add tabs
-        self.tabs.addTab(LaTeXCircuitDesigner(), "Designer")
+        self.tabs.addTab(LaTeXCircuitDesigner(), "Gates")
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("LaTeX Circuit Suite")
-    app.setApplicationVersion("2.0")
 
     window = MainApp()
     window.show()

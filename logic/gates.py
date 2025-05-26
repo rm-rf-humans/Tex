@@ -7,274 +7,17 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QToolBox, QPushButton, QLabel, QSpinBox, QLineEdit,
                              QTextEdit, QSplitter, QFileDialog, QMessageBox, QGroupBox,
                              QFormLayout, QComboBox, QGraphicsEllipseItem, QGraphicsPolygonItem,
-                             QGraphicsPathItem)
+                             QGraphicsPathItem, QGridLayout, QFrame)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer, QPointF, QLineF
 from PyQt5.QtGui import QPen, QBrush, QColor, QFont, QPainter, QPixmap, QPolygonF, QPainterPath, QPainterPathStroker
 from pylatex import Document, TikZ, Command
 from pylatex.tikz import TikZNode, TikZDraw
-
-
-class ConnectionPoint(QGraphicsEllipseItem):
-    """Visual connection point for gate inputs/outputs"""
     
-    def __init__(self, parent_gate, point_type, index, x, y):
-        super().__init__(-3, -3, 6, 6)  # Small circle
-        self.parent_gate = parent_gate
-        self.point_type = point_type  # 'input' or 'output'
-        self.index = index
-        self.setPos(x, y)
-        self.setParentItem(parent_gate)
-        
-        # Style
-        self.setPen(QPen(QColor(100, 100, 100), 1))
-        self.setBrush(QBrush(QColor(200, 200, 200)))
-        
-        # Make it hoverable
-        self.setAcceptHoverEvents(True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, False)
-        
-        # Connected wires
-        self.connected_wires = []
-        
-    def hoverEnterEvent(self, event):
-        self.setBrush(QBrush(QColor(255, 100, 100)))
-        self.setPen(QPen(QColor(255, 0, 0), 2))
-        super().hoverEnterEvent(event)
-        
-    def hoverLeaveEvent(self, event):
-        self.setBrush(QBrush(QColor(200, 200, 200)))
-        self.setPen(QPen(QColor(100, 100, 100), 1))
-        super().hoverLeaveEvent(event)
     
-    def get_scene_pos(self):
-        """Get the absolute scene position of this connection point"""
-        return self.mapToScene(self.boundingRect().center())
-    
-    def add_wire(self, wire):
-        """Add a wire connected to this point"""
-        self.connected_wires.append(wire)
-    
-    def remove_wire(self, wire):
-        """Remove a wire from this point"""
-        if wire in self.connected_wires:
-            self.connected_wires.remove(wire)
-
-
-class GateItem(QGraphicsItem):
-    """Custom graphics item for logic gates with proper shapes"""
-    
-    def __init__(self, gate_type, x, y, inputs=2):
-        super().__init__()
-        self.gate_type = gate_type
-        self.num_inputs = inputs
-        self.setPos(x, y)
-        
-        # Make it movable and selectable
-        self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
-        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-        
-        # Gate dimensions
-        self.width = 80
-        self.height = 60
-        
-        # Connection points
-        self.input_points = []
-        self.output_points = []
-        
-        self.create_connection_points()
-        
-    def create_connection_points(self):
-        """Create input and output connection points"""
-        # Clear existing points
-        for point in self.input_points + self.output_points:
-            if point.scene():
-                point.scene().removeItem(point)
-        
-        self.input_points = []
-        self.output_points = []
-        
-        # Create input points (left side)
-        input_spacing = self.height / (self.num_inputs + 1)
-        for i in range(self.num_inputs):
-            y_pos = input_spacing * (i + 1) - self.height/2
-            point = ConnectionPoint(self, 'input', i, -10, y_pos)
-            self.input_points.append(point)
-        
-        # Create output point (right side)
-        output_point = ConnectionPoint(self, 'output', 0, self.width + 10, 0)
-        self.output_points.append(output_point)
-    
-    def boundingRect(self):
-        return QRectF(-20, -self.height/2 - 10, self.width + 40, self.height + 20)
-    
-    def paint(self, painter, option, widget):
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Set pen and brush
-        pen = QPen(QColor(0, 0, 0), 2)
-        if self.isSelected():
-            pen.setColor(QColor(255, 0, 0))
-        painter.setPen(pen)
-        painter.setBrush(QBrush(QColor(255, 255, 255)))
-        
-        # Draw gate shape based on type
-        if self.gate_type == "AND":
-            self.draw_and_gate(painter)
-        elif self.gate_type == "OR":
-            self.draw_or_gate(painter)
-        elif self.gate_type == "NOT":
-            self.draw_not_gate(painter)
-        elif self.gate_type == "NAND":
-            self.draw_and_gate(painter)
-            self.draw_negation_circle(painter, self.width, 0)
-        elif self.gate_type == "NOR":
-            self.draw_or_gate(painter)
-            self.draw_negation_circle(painter, self.width, 0)
-        elif self.gate_type == "XOR":
-            self.draw_xor_gate(painter)
-        elif self.gate_type == "XNOR":
-            self.draw_xor_gate(painter)
-            self.draw_negation_circle(painter, self.width, 0)
-    
-    def draw_and_gate(self, painter):
-        """Draw AND gate shape"""
-        path = QPainterPath()
-        path.moveTo(0, -self.height/2)
-        path.lineTo(self.width/2, -self.height/2)
-        path.arcTo(self.width/2 - self.height/2, -self.height/2, self.height, self.height, 90, -180)
-        path.lineTo(0, self.height/2)
-        path.closeSubpath()
-        painter.drawPath(path)
-    
-    def draw_or_gate(self, painter):
-        """Draw OR gate shape"""
-        path = QPainterPath()
-        # Left curved side
-        path.moveTo(0, -self.height/2)
-        path.quadTo(self.width/4, -self.height/4, self.width/4, 0)
-        path.quadTo(self.width/4, self.height/4, 0, self.height/2)
-        # Right curved side
-        path.quadTo(self.width/2, self.height/4, self.width, 0)
-        path.quadTo(self.width/2, -self.height/4, 0, -self.height/2)
-        painter.drawPath(path)
-    
-    def draw_xor_gate(self, painter):
-        """Draw XOR gate shape"""
-        # Draw OR gate
-        self.draw_or_gate(painter)
-        # Add extra arc on the left
-        path = QPainterPath()
-        path.moveTo(-8, -self.height/2)
-        path.quadTo(-4, 0, -8, self.height/2)
-        painter.drawPath(path)
-    
-    def draw_not_gate(self, painter):
-        """Draw NOT gate shape (triangle with circle)"""
-        # Triangle
-        triangle = QPolygonF([
-            QPointF(0, -self.height/2),
-            QPointF(0, self.height/2),
-            QPointF(self.width - 10, 0)
-        ])
-        painter.drawPolygon(triangle)
-        
-        # Negation circle
-        self.draw_negation_circle(painter, self.width - 10, 0)
-    
-    def draw_negation_circle(self, painter, x, y):
-        """Draw negation circle at specified position"""
-        painter.drawEllipse(QPointF(x, y), 5, 5)
-    
-    def itemChange(self, change, value):
-        """Handle item changes (like position changes)"""
-        if change == QGraphicsItem.ItemPositionChange:
-            # Update connected wires when gate moves
-            self.update_connected_wires()
-        return super().itemChange(change, value)
-    
-    def update_connected_wires(self):
-        """Update all wires connected to this gate"""
-        for point in self.input_points + self.output_points:
-            for wire in point.connected_wires:
-                wire.update_position()
-    
-    def get_tikz_code(self, gate_id):
-        """Generate TikZ code for this gate"""
-        x, y = self.pos().x() / 50, -self.pos().y() / 50
-        
-        # Map gate types to TikZ library names
-        tikz_gates = {
-            "AND": "and gate US",
-            "OR": "or gate US", 
-            "NOT": "not gate US",
-            "NAND": "nand gate US",
-            "NOR": "nor gate US",
-            "XOR": "xor gate US",
-            "XNOR": "xnor gate US"
-        }
-        
-        gate_name = tikz_gates.get(self.gate_type, "and gate US")
-        inputs_spec = f", inputs={self.num_inputs}" if self.num_inputs > 2 else ""
-        
-        return f"    \\node[{gate_name}, draw{inputs_spec}] ({gate_id}) at ({x:.2f}, {y:.2f}) {{}};"
-
-
-class WireItem(QGraphicsItem):
-    """Custom graphics item for wires/connections between gates"""
-    
-    def __init__(self, start_point, end_point):
-        super().__init__()
-        self.start_connection = start_point  # ConnectionPoint object
-        self.end_connection = end_point      # ConnectionPoint object
-        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
-        
-        # Register with connection points
-        if start_point:
-            start_point.add_wire(self)
-        if end_point:
-            end_point.add_wire(self)
-    
-    def boundingRect(self):
-        if not (self.start_connection and self.end_connection):
-            return QRectF()
-        
-        start_pos = self.start_connection.get_scene_pos()
-        end_pos = self.end_connection.get_scene_pos()
-        return QRectF(start_pos, end_pos).normalized().adjusted(-2, -2, 2, 2)
-    
-    def paint(self, painter, option, widget):
-        if not (self.start_connection and self.end_connection):
-            return
-            
-        start_pos = self.mapFromScene(self.start_connection.get_scene_pos())
-        end_pos = self.mapFromScene(self.end_connection.get_scene_pos())
-        
-        pen = QPen(QColor(0, 0, 0), 2)
-        if self.isSelected():
-            pen.setColor(QColor(255, 0, 0))
-        painter.setPen(pen)
-        painter.drawLine(start_pos, end_pos)
-    
-    def update_position(self):
-        """Update wire position when connected gates move"""
-        self.prepareGeometryChange()
-        self.update()
-    
-    def get_tikz_code(self, start_gate_id, end_gate_id, start_pin, end_pin):
-        """Generate TikZ code for this wire using gate references"""
-        if not (self.start_connection and self.end_connection):
-            return ""
-        
-        # Determine pin references
-        start_ref = f"{start_gate_id}.output" if self.start_connection.point_type == 'output' else f"{start_gate_id}.input {self.start_connection.index + 1}"
-        end_ref = f"{end_gate_id}.input {self.end_connection.index + 1}" if self.end_connection.point_type == 'input' else f"{end_gate_id}.output"
-        
-        return f"    \\draw ({start_ref}) -- ({end_ref});"
-
+from rulers import RulerManager
 
 class CircuitCanvas(QGraphicsView):
-    """Main canvas for drawing circuits"""
+    """Enhanced canvas with better connection handling"""
     
     def __init__(self):
         super().__init__()
@@ -289,68 +32,246 @@ class CircuitCanvas(QGraphicsView):
         self.current_tool = "select"
         self.connecting = False
         self.start_connection_point = None
+        self.preview_wire = None
         
         # Set scene size
         self.scene.setSceneRect(-500, -500, 1000, 1000)
         
+        # Enable mouse tracking for preview wire
+        self.setMouseTracking(True)
+
+        self.shift_pressed = False
+
+        self.grid_size = 25  
+        self.snap_to_grid_enabled = True  # Renamed to avoid conflict
+        self.show_grid = True
+        
+        # Initialize ruler manager - this should be the ONLY place it's created
+        self.ruler_manager = RulerManager(self)
+        self.rulers_enabled = True
+
+    def drawBackground(self, painter, rect):
+        """Draw grid background"""
+        if self.show_grid:
+            painter.setPen(QPen(QColor(200, 200, 200), 0.5))
+            
+            # Draw vertical lines
+            left = int(rect.left()) - (int(rect.left()) % self.grid_size)
+            top = int(rect.top()) - (int(rect.top()) % self.grid_size)
+            
+            lines = []
+            x = left
+            while x < rect.right():
+                lines.append(QLineF(x, rect.top(), x, rect.bottom()))
+                x += self.grid_size
+                
+            # Draw horizontal lines
+            y = top
+            while y < rect.bottom():
+                lines.append(QLineF(rect.left(), y, rect.right(), y))
+                y += self.grid_size
+                
+            painter.drawLines(lines)
+        
+        super().drawBackground(painter, rect)
+        
+    def snap_position_to_grid(self, pos):
+        """Snap position to grid and guides"""
+        # First snap to grid if enabled
+        if self.snap_to_grid_enabled:
+            x = round(pos.x() / self.grid_size) * self.grid_size
+            y = round(pos.y() / self.grid_size) * self.grid_size
+            pos = QPointF(x, y)
+        
+        # Then snap to guides if enabled and ruler_manager exists
+        if hasattr(self, 'ruler_manager') and self.ruler_manager:
+            pos = self.ruler_manager.get_snap_position(pos)
+        
+        return pos
+
     def set_tool(self, tool):
         """Set the current drawing tool"""
         self.current_tool = tool
         if tool == "select":
             self.setDragMode(QGraphicsView.RubberBandDrag)
+            self.cancel_connection()
         else:
             self.setDragMode(QGraphicsView.NoDrag)
+    
+    def cancel_connection(self):
+        """Cancel current connection operation"""
+        if self.connecting and self.preview_wire:
+            self.scene.removeItem(self.preview_wire)
+            self.preview_wire = None
+        self.connecting = False
+        self.start_connection_point = None
     
     def mousePressEvent(self, event):
         if self.current_tool == "select":
             super().mousePressEvent(event)
         elif self.current_tool == "wire":
-            # Check if we clicked on a connection point
-            item = self.itemAt(event.pos())
-            if isinstance(item, ConnectionPoint):
-                if not self.connecting:
-                    # Start connection
-                    self.start_connection_point = item
-                    self.connecting = True
-                else:
-                    # Complete connection
-                    if item != self.start_connection_point:
-                        # Check if connection is valid (output to input or vice versa)
-                        if self.is_valid_connection(self.start_connection_point, item):
-                            wire = WireItem(self.start_connection_point, item)
-                            self.scene.addItem(wire)
-                    
-                    self.connecting = False
-                    self.start_connection_point = None
-            else:
-                # Cancel connection if clicking elsewhere
-                self.connecting = False
-                self.start_connection_point = None
+            if event.button() == Qt.LeftButton:
+                # Check if we clicked on a connection point or junction
+                item = self.itemAt(event.pos())
+                scene_pos = self.mapToScene(event.pos())
                 
+                if isinstance(item, (ConnectionPoint, JunctionPoint)):
+                    if not self.connecting:
+                        # Start connection
+                        self.start_connection_point = item
+                        self.connecting = True
+                        # Create preview wire
+                        self.preview_wire = PreviewWire(item, scene_pos)
+                        self.scene.addItem(self.preview_wire)
+                    else:
+                        # Complete connection
+                        if item != self.start_connection_point:
+                            if self.is_valid_connection(self.start_connection_point, item):
+                                wire = WireItem(self.start_connection_point, item)
+                                self.scene.addItem(wire)
+                        
+                        self.cancel_connection()
+                elif self.connecting:
+                    # Create junction at mouse position
+                    if self.shift_pressed:
+                        start_pos = self.start_connection_point.scenePos()
+                        dx = scene_pos.x() - start_pos.x()
+                        dy = scene_pos.y() - start_pos.y()
+                        
+                        if abs(dx) > abs(dy):
+                            junction_pos = QPointF(scene_pos.x(), start_pos.y())
+                        else:
+                            junction_pos = QPointF(start_pos.x(), scene_pos.y())
+                        
+                        junction_pos = self.snap_position_to_grid(junction_pos)
+                        junction = JunctionPoint(junction_pos.x(), junction_pos.y())
+                    else:
+                        snapped_pos = self.snap_position_to_grid(scene_pos)
+                        junction = JunctionPoint(snapped_pos.x(), snapped_pos.y())
+                            
+                    self.scene.addItem(junction)
+                    
+                    # Connect start point to junction
+                    wire1 = WireItem(self.start_connection_point, junction)
+                    self.scene.addItem(wire1)
+                    
+                    # Start new connection from junction
+                    self.start_connection_point = junction
+                    if self.preview_wire:
+                        self.scene.removeItem(self.preview_wire)
+                    self.preview_wire = PreviewWire(junction, scene_pos)
+                    self.scene.addItem(self.preview_wire)
+                else:
+                    # Cancel connection if clicking elsewhere
+                    self.cancel_connection()
+            elif event.button() == Qt.RightButton:
+                # Right click cancels connection
+                self.cancel_connection()
+        
+        # Fixed: Gate placement logic moved out of wire tool block
         elif self.current_tool in ["AND", "OR", "NOT", "NAND", "NOR", "XOR", "XNOR"]:
-            scene_pos = self.mapToScene(event.pos())
-            inputs = 1 if self.current_tool == "NOT" else 2
-            gate = GateItem(self.current_tool, scene_pos.x(), scene_pos.y(), inputs)
-            self.scene.addItem(gate)
+            if event.button() == Qt.LeftButton:
+                scene_pos = self.mapToScene(event.pos())
+                # Snap to grid
+                snapped_pos = self.snap_position_to_grid(scene_pos)
+                inputs = 1 if self.current_tool == "NOT" else 2
+                gate = GateItem(self.current_tool, snapped_pos.x(), snapped_pos.y(), inputs)
+                self.scene.addItem(gate)
+
+    def toggle_rulers(self):
+        if hasattr(self, 'ruler_manager') and self.ruler_manager:
+            self.ruler_manager.toggle_rulers()
     
+    def clear_guides(self):
+        if hasattr(self, 'ruler_manager') and self.ruler_manager:
+            self.ruler_manager.clear_guides()
+        
+    def set_guide_snap_enabled(self, enabled):
+        if hasattr(self, 'ruler_manager') and self.ruler_manager:
+            self.ruler_manager.set_guide_snap_enabled(enabled)
+
+    def toggle_grid_snap(self):
+        """Toggle grid snapping on/off"""
+        self.snap_to_grid_enabled = not self.snap_to_grid_enabled
+
+    def toggle_grid_display(self):
+        """Toggle grid display on/off"""
+        self.show_grid = not self.show_grid
+        self.viewport().update()
+
+    def set_grid_size(self, size):
+        """Set grid size"""
+        self.grid_size = max(5, size)  # Minimum grid size of 5 pixels
+        self.viewport().update()
+    
+    def mouseMoveEvent(self, event):
+        if self.connecting and self.preview_wire:
+            scene_pos = self.mapToScene(event.pos())
+            
+            # Check if shift is pressed for orthogonal routing
+            if self.shift_pressed:
+                start_pos = self.start_connection_point.scenePos()
+                
+                # Calculate orthogonal position
+                dx = scene_pos.x() - start_pos.x()
+                dy = scene_pos.y() - start_pos.y()
+                
+                # Choose the dominant direction
+                if abs(dx) > abs(dy):
+                    # Horizontal first
+                    ortho_pos = QPointF(scene_pos.x(), start_pos.y())
+                else:
+                    # Vertical first  
+                    ortho_pos = QPointF(start_pos.x(), scene_pos.y())
+                
+                self.preview_wire.update_end_pos(ortho_pos)
+            else:
+                self.preview_wire.update_end_pos(scene_pos)
+        
+        super().mouseMoveEvent(event)
+
+    def keyPressEvent(self, event):
+        """Handle key presses"""
+        if event.key() == Qt.Key_Escape:
+            self.cancel_connection()
+        elif event.key() == Qt.Key_Shift:
+            self.shift_pressed = True
+        elif event.key() == Qt.Key_G:
+            self.toggle_grid_display()  # G key toggles grid display
+        elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
+            self.toggle_grid_snap()  # Ctrl+S toggles grid snapping
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        """Handle key releases"""
+        if event.key() == Qt.Key_Shift:
+            self.shift_pressed = False
+        super().keyReleaseEvent(event)
+
     def is_valid_connection(self, point1, point2):
-        """Check if connection between two points is valid"""
+        """Enhanced connection validation"""
         # Can't connect point to itself
         if point1 == point2:
             return False
         
-        # Can't connect two points of the same type
-        if point1.point_type == point2.point_type:
-            return False
+        # Junctions can connect to anything
+        if isinstance(point1, JunctionPoint) or isinstance(point2, JunctionPoint):
+            return True
+        
+        # Can't connect two points of the same type (both inputs or both outputs)
+        if hasattr(point1, 'point_type') and hasattr(point2, 'point_type'):
+            if point1.point_type == point2.point_type:
+                return False
         
         # Can't connect points from the same gate
-        if point1.parent_gate == point2.parent_gate:
-            return False
+        if hasattr(point1, 'parent_gate') and hasattr(point2, 'parent_gate'):
+            if point1.parent_gate == point2.parent_gate:
+                return False
         
-        # Input points can only have one connection
-        if point1.point_type == 'input' and len(point1.connected_wires) > 0:
+        # Input points can only have one connection (but outputs can have multiple)
+        if hasattr(point1, 'point_type') and point1.point_type == 'input' and len(point1.connected_wires) > 0:
             return False
-        if point2.point_type == 'input' and len(point2.connected_wires) > 0:
+        if hasattr(point2, 'point_type') and point2.point_type == 'input' and len(point2.connected_wires) > 0:
             return False
         
         return True
@@ -361,45 +282,72 @@ class CircuitCanvas(QGraphicsView):
         tikz_code.append("\\documentclass[tikz, border=15pt]{standalone}")
         tikz_code.append("\\usetikzlibrary{positioning, shapes.gates.logic.US, calc}")
         tikz_code.append("\\usepackage{amsmath}")
-        tikz_code.append("\\newcommand{\\splitmark}[2]{(#1) node[circle, fill, inner sep= 0pt, outer sep= 0pt, minimum size= 2*#2]{}}")
         tikz_code.append("\\begin{document}")
         tikz_code.append("\\begin{tikzpicture}")
         
-        # Generate gates with IDs
+        # Get all items
         gates = [item for item in self.scene.items() if isinstance(item, GateItem)]
+        junctions = [item for item in self.scene.items() if isinstance(item, JunctionPoint)]
         wires = [item for item in self.scene.items() if isinstance(item, WireItem)]
         
         # Create gate ID mapping
         gate_id_map = {}
         for i, gate in enumerate(gates):
-            gate_id = f"{gate.gate_type.lower()}{i+1}" if i > 0 or len([g for g in gates if g.gate_type == gate.gate_type]) > 1 else gate.gate_type.lower()
+            gate_type_count = len([g for g in gates if g.gate_type == gate.gate_type])
+            if gate_type_count > 1:
+                gate_id = f"{gate.gate_type.lower()}{i+1}"
+            else:
+                gate_id = gate.gate_type.lower()
             gate_id_map[gate] = gate_id
+        
+        # Create junction ID mapping
+        junction_id_map = {}
+        for i, junction in enumerate(junctions):
+            junction_id_map[junction] = f"junction{i+1}"
         
         # Add gates section
         if gates:
-            tikz_code.append("    %Gates")
+            tikz_code.append("    % Gates")
             for gate in gates:
                 gate_id = gate_id_map[gate]
                 tikz_code.append(gate.get_tikz_code(gate_id))
         
+        # Add junctions section
+        if junctions:
+            tikz_code.append("    ")
+            tikz_code.append("    % Junctions")
+            for junction in junctions:
+                junction_id = junction_id_map[junction]
+                tikz_code.append(junction.get_tikz_code(junction_id))
+        
         # Add connections section
         if wires:
             tikz_code.append("    ")
-            tikz_code.append("    %Connections")
+            tikz_code.append("    % Connections")
             for wire in wires:
                 if wire.start_connection and wire.end_connection:
-                    start_gate = wire.start_connection.parent_gate
-                    end_gate = wire.end_connection.parent_gate
-                    if start_gate in gate_id_map and end_gate in gate_id_map:
-                        start_gate_id = gate_id_map[start_gate]
-                        end_gate_id = gate_id_map[end_gate]
-                        tikz_code.append(wire.get_tikz_code(start_gate_id, end_gate_id, 
-                                                           wire.start_connection.index, 
-                                                           wire.end_connection.index))
+                    start_ref = self.get_connection_reference(wire.start_connection, gate_id_map, junction_id_map)
+                    end_ref = self.get_connection_reference(wire.end_connection, gate_id_map, junction_id_map)
+                    if start_ref and end_ref:
+                        tikz_code.append(wire.get_tikz_code(start_ref, end_ref))
         
         tikz_code.append("\\end{tikzpicture}")
         tikz_code.append("\\end{document}")
         return "\n".join(tikz_code)
+    
+    def get_connection_reference(self, connection, gate_id_map, junction_id_map):
+        """Get TikZ reference for a connection point"""
+        if isinstance(connection, JunctionPoint):
+            return junction_id_map.get(connection)
+        elif isinstance(connection, ConnectionPoint):
+            gate = connection.parent_gate
+            if gate in gate_id_map:
+                gate_id = gate_id_map[gate]
+                if connection.point_type == 'output':
+                    return f"{gate_id}.output"
+                else:
+                    return f"{gate_id}.input {connection.index + 1}"
+        return None
     
     def generate_complete_document(self):
         """Generate a complete LaTeX document with the circuit"""
@@ -410,20 +358,24 @@ class CircuitCanvas(QGraphicsView):
         doc.packages.append(Command('usetikzlibrary', 'positioning, shapes.gates.logic.US, calc'))
         doc.packages.append(Command('usepackage', 'amsmath'))
         
-        # Add custom command for split marks
-        doc.append(Command('newcommand', 
-                          arguments=[Command('splitmark'), '[2]'],
-                          extra_arguments='(#1) node[circle, fill, inner sep= 0pt, outer sep= 0pt, minimum size= 2*#2]{}'))
-        
-        # Generate the circuit content
+        # Get all items
         gates = [item for item in self.scene.items() if isinstance(item, GateItem)]
+        junctions = [item for item in self.scene.items() if isinstance(item, JunctionPoint)]
         wires = [item for item in self.scene.items() if isinstance(item, WireItem)]
         
-        # Create gate ID mapping
+        # Create ID mappings
         gate_id_map = {}
         for i, gate in enumerate(gates):
-            gate_id = f"{gate.gate_type.lower()}{i+1}" if i > 0 or len([g for g in gates if g.gate_type == gate.gate_type]) > 1 else gate.gate_type.lower()
+            gate_type_count = len([g for g in gates if g.gate_type == gate.gate_type])
+            if gate_type_count > 1:
+                gate_id = f"{gate.gate_type.lower()}{i+1}"
+            else:
+                gate_id = gate.gate_type.lower()
             gate_id_map[gate] = gate_id
+        
+        junction_id_map = {}
+        for i, junction in enumerate(junctions):
+            junction_id_map[junction] = f"junction{i+1}"
         
         with doc.create(TikZ()) as tikz:
             # Add gates
@@ -449,22 +401,24 @@ class CircuitCanvas(QGraphicsView):
                                   arguments=[f'({gate_id})'],
                                   extra_arguments=f'at ({x:.2f}, {y:.2f}) {{}}'))
             
+            # Add junctions
+            for junction in junctions:
+                junction_id = junction_id_map[junction]
+                x, y = junction.pos().x() / 50, -junction.pos().y() / 50
+                tikz.append(Command('node', 
+                                  options=['circle, fill, inner sep=1pt'],
+                                  arguments=[f'({junction_id})'],
+                                  extra_arguments=f'at ({x:.2f}, {y:.2f}) {{}}'))
+            
             # Add connections
-import sys
-import os
-import math
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
-                             QWidget, QToolBar, QAction, QGraphicsView, QGraphicsScene, 
-                             QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem,
-                             QToolBox, QPushButton, QLabel, QSpinBox, QLineEdit,
-                             QTextEdit, QSplitter, QFileDialog, QMessageBox, QGroupBox,
-                             QFormLayout, QComboBox, QGraphicsEllipseItem, QGraphicsPolygonItem,
-                             QGraphicsPathItem)
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer
-from PyQt5.QtGui import QPen, QBrush, QColor, QFont, QPainter, QPixmap, QPolygonF, QPainterPath
-from pylatex import Document, TikZ, Command
-from pylatex.tikz import TikZNode, TikZDraw
-
+            for wire in wires:
+                if wire.start_connection and wire.end_connection:
+                    start_ref = self.get_connection_reference(wire.start_connection, gate_id_map, junction_id_map)
+                    end_ref = self.get_connection_reference(wire.end_connection, gate_id_map, junction_id_map)
+                    if start_ref and end_ref:
+                        tikz.append(Command('draw', arguments=[f'({start_ref}) -- ({end_ref})']))
+        
+        return doc
 
 class JunctionPoint(QGraphicsEllipseItem):
     """Junction point for splitting connections"""
@@ -844,387 +798,45 @@ class PreviewWire(QGraphicsItem):
         self.update()
 
 
-class CircuitCanvas(QGraphicsView):
-    """Enhanced canvas with better connection handling"""
+class CanvasWithRulers(QWidget):
+    """Widget that combines canvas with rulers"""
     
-    def __init__(self):
+    def __init__(self, circuit_canvas):
         super().__init__()
-        self.scene = QGraphicsScene()
-        self.setScene(self.scene)
-        
-        # Set up the view
-        self.setDragMode(QGraphicsView.RubberBandDrag)
-        self.setRenderHint(QPainter.Antialiasing)
-        
-        # Drawing state
-        self.current_tool = "select"
-        self.connecting = False
-        self.start_connection_point = None
-        self.preview_wire = None
-        
-        # Set scene size
-        self.scene.setSceneRect(-500, -500, 1000, 1000)
-        
-        # Enable mouse tracking for preview wire
-        self.setMouseTracking(True)
+        self.canvas = circuit_canvas
+        # Add scene property to satisfy RulerManager requirements
+        self.scene = circuit_canvas.scene
+        self.setup_ui()
 
-        self.shift_pressed = False
-
-        self.grid_size = 25  
-        self.snap_to_grid_enabled = True  # Renamed to avoid conflict
-        self.show_grid = True
+    def setup_ui(self):
+        """Set up the UI with rulers and canvas"""
+        layout = QGridLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-    def drawBackground(self, painter, rect):
-        """Draw grid background"""
-        if self.show_grid:
-            painter.setPen(QPen(QColor(200, 200, 200), 0.5))
-            
-            # Draw vertical lines
-            left = int(rect.left()) - (int(rect.left()) % self.grid_size)
-            top = int(rect.top()) - (int(rect.top()) % self.grid_size)
-            
-            lines = []
-            x = left
-            while x < rect.right():
-                lines.append(QLineF(x, rect.top(), x, rect.bottom()))
-                x += self.grid_size
-                
-            # Draw horizontal lines
-            y = top
-            while y < rect.bottom():
-                lines.append(QLineF(rect.left(), y, rect.right(), y))
-                y += self.grid_size
-                
-            painter.drawLines(lines)
+        # Get rulers from the canvas's ruler manager
+        h_ruler, v_ruler = self.canvas.ruler_manager.get_rulers()
         
-        super().drawBackground(painter, rect)
+        # Create corner widget (top-left corner)
+        corner = QFrame()
+        corner.setFixedSize(25, 25)
+        corner.setStyleSheet("background-color: #f0f0f0; border: 1px solid #999;")
+        
+        # Add widgets to grid layout
+        layout.addWidget(corner, 0, 0)           # Top-left corner
+        layout.addWidget(h_ruler, 0, 1)         # Horizontal ruler (top)
+        layout.addWidget(v_ruler, 1, 0)         # Vertical ruler (left)
+        layout.addWidget(self.canvas, 1, 1)     # Canvas (main area)
+        
+        # Make sure the canvas takes up remaining space
+        layout.setRowStretch(1, 1)
+        layout.setColumnStretch(1, 1)
+        
+        # Connect ruler updates to canvas view changes
+        self.canvas.ruler_manager.rulers_toggled.connect(self.on_rulers_toggled)
     
-    def snap_position_to_grid(self, pos):  # Renamed method to avoid confusion
-        """Snap position to grid"""
-        if self.snap_to_grid_enabled:
-            x = round(pos.x() / self.grid_size) * self.grid_size
-            y = round(pos.y() / self.grid_size) * self.grid_size
-            return QPointF(x, y)
-        return pos
-            
-    def set_tool(self, tool):
-        """Set the current drawing tool"""
-        self.current_tool = tool
-        if tool == "select":
-            self.setDragMode(QGraphicsView.RubberBandDrag)
-            self.cancel_connection()
-        else:
-            self.setDragMode(QGraphicsView.NoDrag)
-    
-    def cancel_connection(self):
-        """Cancel current connection operation"""
-        if self.connecting and self.preview_wire:
-            self.scene.removeItem(self.preview_wire)
-            self.preview_wire = None
-        self.connecting = False
-        self.start_connection_point = None
-    
-    def mousePressEvent(self, event):
-        if self.current_tool == "select":
-            super().mousePressEvent(event)
-        elif self.current_tool == "wire":
-            if event.button() == Qt.LeftButton:
-                # Check if we clicked on a connection point or junction
-                item = self.itemAt(event.pos())
-                scene_pos = self.mapToScene(event.pos())
-                
-                if isinstance(item, (ConnectionPoint, JunctionPoint)):
-                    if not self.connecting:
-                        # Start connection
-                        self.start_connection_point = item
-                        self.connecting = True
-                        # Create preview wire
-                        self.preview_wire = PreviewWire(item, scene_pos)
-                        self.scene.addItem(self.preview_wire)
-                    else:
-                        # Complete connection
-                        if item != self.start_connection_point:
-                            if self.is_valid_connection(self.start_connection_point, item):
-                                wire = WireItem(self.start_connection_point, item)
-                                self.scene.addItem(wire)
-                        
-                        self.cancel_connection()
-                elif self.connecting:
-                    # Create junction at mouse position
-                    if self.shift_pressed:
-                        start_pos = self.start_connection_point.scenePos()
-                        dx = scene_pos.x() - start_pos.x()
-                        dy = scene_pos.y() - start_pos.y()
-                        
-                        if abs(dx) > abs(dy):
-                            junction_pos = QPointF(scene_pos.x(), start_pos.y())
-                        else:
-                            junction_pos = QPointF(start_pos.x(), scene_pos.y())
-                        
-                        junction_pos = self.snap_position_to_grid(junction_pos)
-                        junction = JunctionPoint(junction_pos.x(), junction_pos.y())
-                    else:
-                        snapped_pos = self.snap_position_to_grid(scene_pos)
-                        junction = JunctionPoint(snapped_pos.x(), snapped_pos.y())
-                            
-                    self.scene.addItem(junction)
-                    
-                    # Connect start point to junction
-                    wire1 = WireItem(self.start_connection_point, junction)
-                    self.scene.addItem(wire1)
-                    
-                    # Start new connection from junction
-                    self.start_connection_point = junction
-                    if self.preview_wire:
-                        self.scene.removeItem(self.preview_wire)
-                    self.preview_wire = PreviewWire(junction, scene_pos)
-                    self.scene.addItem(self.preview_wire)
-                else:
-                    # Cancel connection if clicking elsewhere
-                    self.cancel_connection()
-            elif event.button() == Qt.RightButton:
-                # Right click cancels connection
-                self.cancel_connection()
-        
-        # Fixed: Gate placement logic moved out of wire tool block
-        elif self.current_tool in ["AND", "OR", "NOT", "NAND", "NOR", "XOR", "XNOR"]:
-            if event.button() == Qt.LeftButton:
-                scene_pos = self.mapToScene(event.pos())
-                # Snap to grid
-                snapped_pos = self.snap_position_to_grid(scene_pos)
-                inputs = 1 if self.current_tool == "NOT" else 2
-                gate = GateItem(self.current_tool, snapped_pos.x(), snapped_pos.y(), inputs)
-                self.scene.addItem(gate)
-    
-    def toggle_grid_snap(self):
-        """Toggle grid snapping on/off"""
-        self.snap_to_grid_enabled = not self.snap_to_grid_enabled
-
-    def toggle_grid_display(self):
-        """Toggle grid display on/off"""
-        self.show_grid = not self.show_grid
-        self.viewport().update()
-
-    def set_grid_size(self, size):
-        """Set grid size"""
-        self.grid_size = max(5, size)  # Minimum grid size of 5 pixels
-        self.viewport().update()
-    
-    def mouseMoveEvent(self, event):
-        if self.connecting and self.preview_wire:
-            scene_pos = self.mapToScene(event.pos())
-            
-            # Check if shift is pressed for orthogonal routing
-            if self.shift_pressed:
-                start_pos = self.start_connection_point.scenePos()
-                
-                # Calculate orthogonal position
-                dx = scene_pos.x() - start_pos.x()
-                dy = scene_pos.y() - start_pos.y()
-                
-                # Choose the dominant direction
-                if abs(dx) > abs(dy):
-                    # Horizontal first
-                    ortho_pos = QPointF(scene_pos.x(), start_pos.y())
-                else:
-                    # Vertical first  
-                    ortho_pos = QPointF(start_pos.x(), scene_pos.y())
-                
-                self.preview_wire.update_end_pos(ortho_pos)
-            else:
-                self.preview_wire.update_end_pos(scene_pos)
-        
-        super().mouseMoveEvent(event)
-
-    def keyPressEvent(self, event):
-        """Handle key presses"""
-        if event.key() == Qt.Key_Escape:
-            self.cancel_connection()
-        elif event.key() == Qt.Key_Shift:
-            self.shift_pressed = True
-        elif event.key() == Qt.Key_G:
-            self.toggle_grid_display()  # G key toggles grid display
-        elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
-            self.toggle_grid_snap()  # Ctrl+S toggles grid snapping
-        super().keyPressEvent(event)
-
-    def keyReleaseEvent(self, event):
-        """Handle key releases"""
-        if event.key() == Qt.Key_Shift:
-            self.shift_pressed = False
-        super().keyReleaseEvent(event)
-
-    def is_valid_connection(self, point1, point2):
-        """Enhanced connection validation"""
-        # Can't connect point to itself
-        if point1 == point2:
-            return False
-        
-        # Junctions can connect to anything
-        if isinstance(point1, JunctionPoint) or isinstance(point2, JunctionPoint):
-            return True
-        
-        # Can't connect two points of the same type (both inputs or both outputs)
-        if hasattr(point1, 'point_type') and hasattr(point2, 'point_type'):
-            if point1.point_type == point2.point_type:
-                return False
-        
-        # Can't connect points from the same gate
-        if hasattr(point1, 'parent_gate') and hasattr(point2, 'parent_gate'):
-            if point1.parent_gate == point2.parent_gate:
-                return False
-        
-        # Input points can only have one connection (but outputs can have multiple)
-        if hasattr(point1, 'point_type') and point1.point_type == 'input' and len(point1.connected_wires) > 0:
-            return False
-        if hasattr(point2, 'point_type') and point2.point_type == 'input' and len(point2.connected_wires) > 0:
-            return False
-        
-        return True
-    
-    def get_all_tikz_code(self):
-        """Generate TikZ code for all items in the scene"""
-        tikz_code = []
-        tikz_code.append("\\documentclass[tikz, border=15pt]{standalone}")
-        tikz_code.append("\\usetikzlibrary{positioning, shapes.gates.logic.US, calc}")
-        tikz_code.append("\\usepackage{amsmath}")
-        tikz_code.append("\\begin{document}")
-        tikz_code.append("\\begin{tikzpicture}")
-        
-        # Get all items
-        gates = [item for item in self.scene.items() if isinstance(item, GateItem)]
-        junctions = [item for item in self.scene.items() if isinstance(item, JunctionPoint)]
-        wires = [item for item in self.scene.items() if isinstance(item, WireItem)]
-        
-        # Create gate ID mapping
-        gate_id_map = {}
-        for i, gate in enumerate(gates):
-            gate_type_count = len([g for g in gates if g.gate_type == gate.gate_type])
-            if gate_type_count > 1:
-                gate_id = f"{gate.gate_type.lower()}{i+1}"
-            else:
-                gate_id = gate.gate_type.lower()
-            gate_id_map[gate] = gate_id
-        
-        # Create junction ID mapping
-        junction_id_map = {}
-        for i, junction in enumerate(junctions):
-            junction_id_map[junction] = f"junction{i+1}"
-        
-        # Add gates section
-        if gates:
-            tikz_code.append("    % Gates")
-            for gate in gates:
-                gate_id = gate_id_map[gate]
-                tikz_code.append(gate.get_tikz_code(gate_id))
-        
-        # Add junctions section
-        if junctions:
-            tikz_code.append("    ")
-            tikz_code.append("    % Junctions")
-            for junction in junctions:
-                junction_id = junction_id_map[junction]
-                tikz_code.append(junction.get_tikz_code(junction_id))
-        
-        # Add connections section
-        if wires:
-            tikz_code.append("    ")
-            tikz_code.append("    % Connections")
-            for wire in wires:
-                if wire.start_connection and wire.end_connection:
-                    start_ref = self.get_connection_reference(wire.start_connection, gate_id_map, junction_id_map)
-                    end_ref = self.get_connection_reference(wire.end_connection, gate_id_map, junction_id_map)
-                    if start_ref and end_ref:
-                        tikz_code.append(wire.get_tikz_code(start_ref, end_ref))
-        
-        tikz_code.append("\\end{tikzpicture}")
-        tikz_code.append("\\end{document}")
-        return "\n".join(tikz_code)
-    
-    def get_connection_reference(self, connection, gate_id_map, junction_id_map):
-        """Get TikZ reference for a connection point"""
-        if isinstance(connection, JunctionPoint):
-            return junction_id_map.get(connection)
-        elif isinstance(connection, ConnectionPoint):
-            gate = connection.parent_gate
-            if gate in gate_id_map:
-                gate_id = gate_id_map[gate]
-                if connection.point_type == 'output':
-                    return f"{gate_id}.output"
-                else:
-                    return f"{gate_id}.input {connection.index + 1}"
-        return None
-    
-    def generate_complete_document(self):
-        """Generate a complete LaTeX document with the circuit"""
-        doc = Document(documentclass='standalone', 
-                      document_options=['tikz', 'border=15pt'])
-        
-        # Add required packages and libraries
-        doc.packages.append(Command('usetikzlibrary', 'positioning, shapes.gates.logic.US, calc'))
-        doc.packages.append(Command('usepackage', 'amsmath'))
-        
-        # Get all items
-        gates = [item for item in self.scene.items() if isinstance(item, GateItem)]
-        junctions = [item for item in self.scene.items() if isinstance(item, JunctionPoint)]
-        wires = [item for item in self.scene.items() if isinstance(item, WireItem)]
-        
-        # Create ID mappings
-        gate_id_map = {}
-        for i, gate in enumerate(gates):
-            gate_type_count = len([g for g in gates if g.gate_type == gate.gate_type])
-            if gate_type_count > 1:
-                gate_id = f"{gate.gate_type.lower()}{i+1}"
-            else:
-                gate_id = gate.gate_type.lower()
-            gate_id_map[gate] = gate_id
-        
-        junction_id_map = {}
-        for i, junction in enumerate(junctions):
-            junction_id_map[junction] = f"junction{i+1}"
-        
-        with doc.create(TikZ()) as tikz:
-            # Add gates
-            for gate in gates:
-                gate_id = gate_id_map[gate]
-                x, y = gate.pos().x() / 50, -gate.pos().y() / 50
-                
-                tikz_gates = {
-                    "AND": "and gate US",
-                    "OR": "or gate US", 
-                    "NOT": "not gate US",
-                    "NAND": "nand gate US",
-                    "NOR": "nor gate US",
-                    "XOR": "xor gate US",
-                    "XNOR": "xnor gate US"
-                }
-                
-                gate_name = tikz_gates.get(gate.gate_type, "and gate US")
-                inputs_spec = f", inputs={gate.num_inputs}" if gate.num_inputs > 2 else ""
-                
-                tikz.append(Command('node', 
-                                  options=[f'{gate_name}, draw{inputs_spec}'],
-                                  arguments=[f'({gate_id})'],
-                                  extra_arguments=f'at ({x:.2f}, {y:.2f}) {{}}'))
-            
-            # Add junctions
-            for junction in junctions:
-                junction_id = junction_id_map[junction]
-                x, y = junction.pos().x() / 50, -junction.pos().y() / 50
-                tikz.append(Command('node', 
-                                  options=['circle, fill, inner sep=1pt'],
-                                  arguments=[f'({junction_id})'],
-                                  extra_arguments=f'at ({x:.2f}, {y:.2f}) {{}}'))
-            
-            # Add connections
-            for wire in wires:
-                if wire.start_connection and wire.end_connection:
-                    start_ref = self.get_connection_reference(wire.start_connection, gate_id_map, junction_id_map)
-                    end_ref = self.get_connection_reference(wire.end_connection, gate_id_map, junction_id_map)
-                    if start_ref and end_ref:
-                        tikz.append(Command('draw', arguments=[f'({start_ref}) -- ({end_ref})']))
-        
-        return doc
+    def on_rulers_toggled(self, visible):
+        pass
 
 class ToolPanel(QWidget):
     """Tool panel with gate selection and properties"""
@@ -1362,8 +974,9 @@ class LaTeXCircuitDesigner(QMainWindow):
         
         # Canvas
         self.canvas = CircuitCanvas()
-        splitter.addWidget(self.canvas)
-        
+        self.canvas_with_rulers = CanvasWithRulers(self.canvas)
+        splitter.addWidget(self.canvas_with_rulers)
+
         # Code viewer
         self.code_viewer = CodeViewer()
         self.code_viewer.setMaximumWidth(350)
@@ -1378,7 +991,7 @@ class LaTeXCircuitDesigner(QMainWindow):
         # Auto-update code periodically
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_code)
-        self.update_timer.start(1000)  # Update every second
+        self.update_timer.start(1000)
         
     def setup_menu(self):
         menubar = self.menuBar()

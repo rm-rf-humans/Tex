@@ -121,7 +121,8 @@ class CircuitCanvas(QGraphicsView):
                         self.start_connection_point = item
                         self.connecting = True
                         # Create preview wire
-                        self.preview_wire = PreviewWire(item, scene_pos)
+                        initial_pos = item.get_scene_pos()
+                        self.preview_wire = PreviewWire(item, initial_pos)
                         self.scene.addItem(self.preview_wire)
                     else:
                         # Complete connection
@@ -134,10 +135,20 @@ class CircuitCanvas(QGraphicsView):
                 elif self.connecting:
                     # Create junction at mouse position
                     if self.shift_pressed:
-                        start_pos = self.start_connection_point.scenePos()
-                        dx = scene_pos.x() - start_pos.x()
-                        dy = scene_pos.y() - start_pos.y()
+                        # Get the actual scene position of the connection point
+                        if hasattr(self.start_connection_point, 'parent_gate'):
+                            # For gate connection points, get position relative to the gate
+                            gate_pos = self.start_connection_point.parent_gate.scenePos()
+                            local_pos = self.start_connection_point.pos()
+                            start_pos = gate_pos + local_pos
+                        else:
+                            # For junction points or other items
+                            start_pos = self.start_connection_point.scenePos()
                         
+                        # Calculate orthogonal position
+                        dx = scene_pos.x() - start_pos.x()
+                        dy = scene_pos.y() - start_pos.y()   
+
                         if abs(dx) > abs(dy):
                             junction_pos = QPointF(scene_pos.x(), start_pos.y())
                         else:
@@ -210,7 +221,7 @@ class CircuitCanvas(QGraphicsView):
             
             # Check if shift is pressed for orthogonal routing
             if self.shift_pressed:
-                start_pos = self.start_connection_point.scenePos()
+                start_pos = self.start_connection_point.get_scene_pos()
                 
                 # Calculate orthogonal position
                 dx = scene_pos.x() - start_pos.x()

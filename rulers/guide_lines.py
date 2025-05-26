@@ -1,7 +1,3 @@
-"""
-Guide lines for precise alignment
-"""
-
 from PyQt5.QtWidgets import QGraphicsLineItem, QGraphicsItem
 from PyQt5.QtCore import Qt, QPointF
 from PyQt5.QtGui import QPen, QColor, QCursor

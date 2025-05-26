@@ -1,7 +1,3 @@
-"""
-Ruler manager for coordinating rulers with the canvas
-"""
-
 from PyQt5.QtCore import QObject, pyqtSignal
 from .ruler_widget import HorizontalRuler, VerticalRuler
 from .guide_lines import GuideLineManager

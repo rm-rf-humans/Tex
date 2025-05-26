@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QTextEdit, QSplitter, QFileDialog, QMessageBox, QGroupBox,
                              QFormLayout, QComboBox, QGraphicsEllipseItem, QGraphicsPolygonItem,
                              QGraphicsPathItem)
-from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer, QPointF
+from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer, QPointF, QLineF
 from PyQt5.QtGui import QPen, QBrush, QColor, QFont, QPainter, QPixmap, QPolygonF, QPainterPath, QPainterPathStroker
 from pylatex import Document, TikZ, Command
 from pylatex.tikz import TikZNode, TikZDraw
@@ -869,7 +869,44 @@ class CircuitCanvas(QGraphicsView):
         self.setMouseTracking(True)
 
         self.shift_pressed = False
+
+        self.grid_size = 25  
+        self.snap_to_grid_enabled = True  # Renamed to avoid conflict
+        self.show_grid = True
         
+    def drawBackground(self, painter, rect):
+        """Draw grid background"""
+        if self.show_grid:
+            painter.setPen(QPen(QColor(200, 200, 200), 0.5))
+            
+            # Draw vertical lines
+            left = int(rect.left()) - (int(rect.left()) % self.grid_size)
+            top = int(rect.top()) - (int(rect.top()) % self.grid_size)
+            
+            lines = []
+            x = left
+            while x < rect.right():
+                lines.append(QLineF(x, rect.top(), x, rect.bottom()))
+                x += self.grid_size
+                
+            # Draw horizontal lines
+            y = top
+            while y < rect.bottom():
+                lines.append(QLineF(rect.left(), y, rect.right(), y))
+                y += self.grid_size
+                
+            painter.drawLines(lines)
+        
+        super().drawBackground(painter, rect)
+    
+    def snap_position_to_grid(self, pos):  # Renamed method to avoid confusion
+        """Snap position to grid"""
+        if self.snap_to_grid_enabled:
+            x = round(pos.x() / self.grid_size) * self.grid_size
+            y = round(pos.y() / self.grid_size) * self.grid_size
+            return QPointF(x, y)
+        return pos
+            
     def set_tool(self, tool):
         """Set the current drawing tool"""
         self.current_tool = tool
@@ -924,10 +961,12 @@ class CircuitCanvas(QGraphicsView):
                         else:
                             junction_pos = QPointF(start_pos.x(), scene_pos.y())
                         
+                        junction_pos = self.snap_position_to_grid(junction_pos)
                         junction = JunctionPoint(junction_pos.x(), junction_pos.y())
                     else:
-                        junction = JunctionPoint(scene_pos.x(), scene_pos.y())                    
-                        
+                        snapped_pos = self.snap_position_to_grid(scene_pos)
+                        junction = JunctionPoint(snapped_pos.x(), snapped_pos.y())
+                            
                     self.scene.addItem(junction)
                     
                     # Connect start point to junction
@@ -946,13 +985,30 @@ class CircuitCanvas(QGraphicsView):
             elif event.button() == Qt.RightButton:
                 # Right click cancels connection
                 self.cancel_connection()
-                
+        
+        # Fixed: Gate placement logic moved out of wire tool block
         elif self.current_tool in ["AND", "OR", "NOT", "NAND", "NOR", "XOR", "XNOR"]:
             if event.button() == Qt.LeftButton:
                 scene_pos = self.mapToScene(event.pos())
+                # Snap to grid
+                snapped_pos = self.snap_position_to_grid(scene_pos)
                 inputs = 1 if self.current_tool == "NOT" else 2
-                gate = GateItem(self.current_tool, scene_pos.x(), scene_pos.y(), inputs)
+                gate = GateItem(self.current_tool, snapped_pos.x(), snapped_pos.y(), inputs)
                 self.scene.addItem(gate)
+    
+    def toggle_grid_snap(self):
+        """Toggle grid snapping on/off"""
+        self.snap_to_grid_enabled = not self.snap_to_grid_enabled
+
+    def toggle_grid_display(self):
+        """Toggle grid display on/off"""
+        self.show_grid = not self.show_grid
+        self.viewport().update()
+
+    def set_grid_size(self, size):
+        """Set grid size"""
+        self.grid_size = max(5, size)  # Minimum grid size of 5 pixels
+        self.viewport().update()
     
     def mouseMoveEvent(self, event):
         if self.connecting and self.preview_wire:
@@ -986,8 +1042,12 @@ class CircuitCanvas(QGraphicsView):
             self.cancel_connection()
         elif event.key() == Qt.Key_Shift:
             self.shift_pressed = True
+        elif event.key() == Qt.Key_G:
+            self.toggle_grid_display()  # G key toggles grid display
+        elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
+            self.toggle_grid_snap()  # Ctrl+S toggles grid snapping
         super().keyPressEvent(event)
-    
+
     def keyReleaseEvent(self, event):
         """Handle key releases"""
         if event.key() == Qt.Key_Shift:
@@ -1168,7 +1228,7 @@ class CircuitCanvas(QGraphicsView):
 
 class ToolPanel(QWidget):
     """Tool panel with gate selection and properties"""
-    
+
     tool_selected = pyqtSignal(str)
     
     def __init__(self):

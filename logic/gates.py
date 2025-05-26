@@ -46,7 +46,6 @@ class CircuitCanvas(QGraphicsView):
         self.snap_to_grid_enabled = True  # Renamed to avoid conflict
         self.show_grid = True
         
-        # Initialize ruler manager - this should be the ONLY place it's created
         self.ruler_manager = RulerManager(self)
         self.rulers_enabled = True
 
@@ -133,29 +132,23 @@ class CircuitCanvas(QGraphicsView):
                         
                         self.cancel_connection()
                 elif self.connecting:
+                    start_pos = self.start_connection_point.get_scene_pos()
                     # Create junction at mouse position
                     if self.shift_pressed:
-                        # Get the actual scene position of the connection point
-                        if hasattr(self.start_connection_point, 'parent_gate'):
-                            # For gate connection points, get position relative to the gate
-                            gate_pos = self.start_connection_point.parent_gate.scenePos()
-                            local_pos = self.start_connection_point.pos()
-                            start_pos = gate_pos + local_pos
-                        else:
-                            # For junction points or other items
-                            start_pos = self.start_connection_point.scenePos()
-                        
-                        # Calculate orthogonal position
                         dx = scene_pos.x() - start_pos.x()
-                        dy = scene_pos.y() - start_pos.y()   
+                        dy = scene_pos.y() - start_pos.y()
 
+                        final_junction_pos = QPointF()
                         if abs(dx) > abs(dy):
-                            junction_pos = QPointF(scene_pos.x(), start_pos.y())
+                            temp_pos_for_x_snap = QPointF(scene_pos.x(), start_pos.y())
+                            snapped_temp_pos = self.snap_position_to_grid(temp_pos_for_x_snap)
+                            final_junction_pos = QPointF(snapped_temp_pos.x(), start_pos.y())
                         else:
-                            junction_pos = QPointF(start_pos.x(), scene_pos.y())
+                            temp_pos_for_y_snap = QPointF(start_pos.x(), scene_pos.y())
+                            snapped_temp_pos = self.snap_position_to_grid(temp_pos_for_y_snap)
+                            final_junction_pos = QPointF(start_pos.x(), snapped_temp_pos.y())
                         
-                        junction_pos = self.snap_position_to_grid(junction_pos)
-                        junction = JunctionPoint(junction_pos.x(), junction_pos.y())
+                        junction = JunctionPoint(final_junction_pos.x(), final_junction_pos.y())
                     else:
                         snapped_pos = self.snap_position_to_grid(scene_pos)
                         junction = JunctionPoint(snapped_pos.x(), snapped_pos.y())
@@ -170,7 +163,8 @@ class CircuitCanvas(QGraphicsView):
                     self.start_connection_point = junction
                     if self.preview_wire:
                         self.scene.removeItem(self.preview_wire)
-                    self.preview_wire = PreviewWire(junction, scene_pos)
+                    snapped_mouse_pos_for_preview = self.snap_position_to_grid(scene_pos)
+                    self.preview_wire = PreviewWire(junction, snapped_mouse_pos_for_preview)
                     self.scene.addItem(self.preview_wire)
                 else:
                     # Cancel connection if clicking elsewhere
@@ -212,7 +206,7 @@ class CircuitCanvas(QGraphicsView):
 
     def set_grid_size(self, size):
         """Set grid size"""
-        self.grid_size = max(5, size)  # Minimum grid size of 5 pixels
+        self.grid_size = max(5, size)
         self.viewport().update()
     
     def mouseMoveEvent(self, event):
@@ -261,25 +255,20 @@ class CircuitCanvas(QGraphicsView):
 
     def is_valid_connection(self, point1, point2):
         """Enhanced connection validation"""
-        # Can't connect point to itself
         if point1 == point2:
             return False
         
-        # Junctions can connect to anything
         if isinstance(point1, JunctionPoint) or isinstance(point2, JunctionPoint):
             return True
         
-        # Can't connect two points of the same type (both inputs or both outputs)
         if hasattr(point1, 'point_type') and hasattr(point2, 'point_type'):
             if point1.point_type == point2.point_type:
                 return False
         
-        # Can't connect points from the same gate
         if hasattr(point1, 'parent_gate') and hasattr(point2, 'parent_gate'):
             if point1.parent_gate == point2.parent_gate:
                 return False
         
-        # Input points can only have one connection (but outputs can have multiple)
         if hasattr(point1, 'point_type') and point1.point_type == 'input' and len(point1.connected_wires) > 0:
             return False
         if hasattr(point2, 'point_type') and point2.point_type == 'input' and len(point2.connected_wires) > 0:
@@ -701,8 +690,8 @@ class WireItem(QGraphicsItem):
     
     def __init__(self, start_point, end_point):
         super().__init__()
-        self.start_connection = start_point  # Can be ConnectionPoint or JunctionPoint
-        self.end_connection = end_point      # Can be ConnectionPoint or JunctionPoint
+        self.start_connection = start_point 
+        self.end_connection = end_point     
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         
         # Wire appearance
@@ -834,7 +823,7 @@ class CanvasWithRulers(QWidget):
         corner.setStyleSheet("background-color: #f0f0f0; border: 1px solid #999;")
         
         # Add widgets to grid layout
-        layout.addWidget(corner, 0, 0)           # Top-left corner
+        layout.addWidget(corner, 0, 0)          # Top-left corner
         layout.addWidget(h_ruler, 0, 1)         # Horizontal ruler (top)
         layout.addWidget(v_ruler, 1, 0)         # Vertical ruler (left)
         layout.addWidget(self.canvas, 1, 1)     # Canvas (main area)
@@ -1120,7 +1109,6 @@ class LaTeXCircuitDesigner(QMainWindow):
         self.update_code()
         
     def update_code(self):
-        """Update the displayed TikZ code"""
         code = self.canvas.get_all_tikz_code()
         self.code_viewer.set_code(code)
 
@@ -1128,11 +1116,6 @@ class LaTeXCircuitDesigner(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     
-    # Set application properties
-    app.setApplicationName("LaTeX Circuit Designer")
-    app.setApplicationVersion("2.0")
-    
-    # Create and show main window
     window = LaTeXCircuitDesigner()
     window.show()
     

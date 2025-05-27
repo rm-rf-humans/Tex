@@ -140,17 +140,17 @@ class CircuitCanvas(QGraphicsView):
 
                         final_junction_pos = QPointF()
                         if abs(dx) > abs(dy):
-                            temp_pos_for_x_snap = QPointF(scene_pos.x(), start_pos.y())
-                            snapped_temp_pos = self.snap_position_to_grid(temp_pos_for_x_snap)
-                            final_junction_pos = QPointF(snapped_temp_pos.x(), start_pos.y())
+                            #temp_pos_for_x_snap = QPointF(scene_pos.x(), start_pos.y())
+                            #snapped_temp_pos = self.snap_position_to_grid(temp_pos_for_x_snap)
+                            final_junction_pos = QPointF(scene_pos.x(), start_pos.y())
                         else:
-                            temp_pos_for_y_snap = QPointF(start_pos.x(), scene_pos.y())
-                            snapped_temp_pos = self.snap_position_to_grid(temp_pos_for_y_snap)
-                            final_junction_pos = QPointF(start_pos.x(), snapped_temp_pos.y())
+                            #temp_pos_for_y_snap = QPointF(start_pos.x(), scene_pos.y())
+                            #snapped_temp_pos = scene_pos
+                            final_junction_pos = QPointF(start_pos.x(), scene_pos.y())
                         
                         junction = JunctionPoint(final_junction_pos.x(), final_junction_pos.y())
                     else:
-                        snapped_pos = self.snap_position_to_grid(scene_pos)
+                        snapped_pos = scene_pos
                         junction = JunctionPoint(snapped_pos.x(), snapped_pos.y())
                             
                     self.scene.addItem(junction)

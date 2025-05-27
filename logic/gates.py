@@ -15,6 +15,7 @@ from pylatex.tikz import TikZNode, TikZDraw
     
     
 from rulers import RulerManager
+from toolbar.app_toolbar import HorizontalActionsToolbar
 
 class CircuitCanvas(QGraphicsView):
     """Enhanced canvas with better connection handling"""
@@ -836,6 +837,7 @@ class CanvasWithRulers(QWidget):
     
     def on_rulers_toggled(self, visible):
         pass
+
 class ToolPanel(QWidget):
     """Tool panel with gate selection and properties, now using QToolBox."""
 
@@ -852,20 +854,6 @@ class ToolPanel(QWidget):
         # Create the QToolBox
         self.tool_box = QToolBox()
         main_layout.addWidget(self.tool_box)
-
-        tools_page = QWidget()
-        tools_layout = QVBoxLayout(tools_page)
-
-        select_btn = QPushButton("Select")
-        select_btn.clicked.connect(lambda: self.tool_selected.emit("select"))
-        tools_layout.addWidget(select_btn)
-
-        wire_btn = QPushButton("Wire")
-        wire_btn.clicked.connect(lambda: self.tool_selected.emit("wire"))
-        tools_layout.addWidget(wire_btn)
-
-        tools_layout.addStretch()
-        self.tool_box.addItem(tools_page, "Tools")
 
         gates_page = QWidget()
         gates_layout = QVBoxLayout(gates_page)
@@ -971,6 +959,7 @@ class LaTeXCircuitDesigner(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        self.main_toolbar = HorizontalActionsToolbar(self)
         self.setup_ui()
         self.setup_menu()
         self.setup_connections()
@@ -978,6 +967,8 @@ class LaTeXCircuitDesigner(QMainWindow):
     def setup_ui(self):
         self.setWindowTitle("LaTeX Circuit Designer")
         self.setGeometry(100, 100, 1200, 800)
+        
+        self.addToolBar(self.main_toolbar)
         
         # Central widget with splitter
         central_widget = QWidget()
@@ -1013,48 +1004,20 @@ class LaTeXCircuitDesigner(QMainWindow):
         self.update_timer.start(1000)
         
     def setup_menu(self):
-        menubar = self.menuBar()
-        
-        # File menu
-        file_menu = menubar.addMenu('File')
-        
-        new_action = QAction('New', self)
-        new_action.setShortcut('Ctrl+N')
-        new_action.triggered.connect(self.new_circuit)
-        file_menu.addAction(new_action)
-        
-        open_action = QAction('Open', self)
-        open_action.setShortcut('Ctrl+O')
-        open_action.triggered.connect(self.open_circuit)
-        file_menu.addAction(open_action)
-        
-        save_action = QAction('Save', self)
-        save_action.setShortcut('Ctrl+S')
-        save_action.triggered.connect(self.save_circuit)
-        file_menu.addAction(save_action)
-        
-        file_menu.addSeparator()
-        
-        export_action = QAction('Export TikZ', self)
-        export_action.triggered.connect(self.export_tikz)
-        file_menu.addAction(export_action)
-        
-        export_pdf_action = QAction('Export PDF', self)
-        export_pdf_action.triggered.connect(self.export_pdf)
-        file_menu.addAction(export_pdf_action)
-        
-        export_tex_action = QAction('Export Complete Document', self)
-        export_tex_action.triggered.connect(self.export_complete_document)
-        file_menu.addAction(export_tex_action)
-        
-        # Edit menu
-        edit_menu = menubar.addMenu('Edit')
-        
-        delete_action = QAction('Delete', self)
-        delete_action.setShortcut('Delete')
-        delete_action.triggered.connect(self.delete_selected)
-        edit_menu.addAction(delete_action)
-        
+            menubar = self.menuBar()
+
+            file_menu = menubar.addMenu('File')
+            file_menu.addAction(self.main_toolbar.new_action)
+            file_menu.addAction(self.main_toolbar.open_action)
+            file_menu.addAction(self.main_toolbar.save_action)
+            file_menu.addSeparator()
+            file_menu.addAction(self.main_toolbar.export_tikz_action)
+            file_menu.addAction(self.main_toolbar.export_pdf_action)
+            file_menu.addAction(self.main_toolbar.export_tex_action)
+
+            edit_menu = menubar.addMenu('Edit')
+            edit_menu.addAction(self.main_toolbar.delete_action)
+
     def setup_connections(self):
         """Setup signal connections"""
         self.tool_panel.tool_selected.connect(self.canvas.set_tool)

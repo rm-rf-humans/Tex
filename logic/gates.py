@@ -75,7 +75,6 @@ class CircuitCanvas(QGraphicsView):
         super().drawBackground(painter, rect)
         
     def snap_position_to_grid(self, pos):
-        """Snap position to grid and guides"""
         # First snap to grid if enabled
         if self.snap_to_grid_enabled:
             x = round(pos.x() / self.grid_size) * self.grid_size
@@ -837,60 +836,80 @@ class CanvasWithRulers(QWidget):
     
     def on_rulers_toggled(self, visible):
         pass
-
 class ToolPanel(QWidget):
-    """Tool panel with gate selection and properties"""
+    """Tool panel with gate selection and properties, now using QToolBox."""
 
     tool_selected = pyqtSignal(str)
-    
+
     def __init__(self):
         super().__init__()
         self.setup_ui()
-        
+
     def setup_ui(self):
-        layout = QVBoxLayout()
-        
-        # Selection tools
-        tools_group = QGroupBox("Tools")
-        tools_layout = QVBoxLayout()
-        
+        # Main layout for the ToolPanel
+        main_layout = QVBoxLayout(self)
+
+        # Create the QToolBox
+        self.tool_box = QToolBox()
+        main_layout.addWidget(self.tool_box)
+
+        tools_page = QWidget()
+        tools_layout = QVBoxLayout(tools_page)
+
         select_btn = QPushButton("Select")
         select_btn.clicked.connect(lambda: self.tool_selected.emit("select"))
         tools_layout.addWidget(select_btn)
-        
+
         wire_btn = QPushButton("Wire")
         wire_btn.clicked.connect(lambda: self.tool_selected.emit("wire"))
         tools_layout.addWidget(wire_btn)
-        
-        tools_group.setLayout(tools_layout)
-        layout.addWidget(tools_group)
-        
-        # Logic gates
-        gates_group = QGroupBox("Logic Gates")
-        gates_layout = QVBoxLayout()
-        
+
+        tools_layout.addStretch()
+        self.tool_box.addItem(tools_page, "Tools")
+
+        gates_page = QWidget()
+        gates_layout = QVBoxLayout(gates_page)
+
         gate_types = ["AND", "OR", "NOT", "NAND", "NOR", "XOR", "XNOR"]
         for gate in gate_types:
             btn = QPushButton(gate)
+            
             btn.clicked.connect(lambda checked, g=gate: self.tool_selected.emit(g))
             gates_layout.addWidget(btn)
-        
-        gates_group.setLayout(gates_layout)
-        layout.addWidget(gates_group)
-        
-        # Properties
+
+        gates_layout.addStretch()
+        self.tool_box.addItem(gates_page, "Logic Gates")
+
+        circuits_page = QWidget()
+        circuits_layout = QVBoxLayout(circuits_page)
+
+        circuit_components = ["Resistor", "Capacitor", "Inductor", "VoltageSource", "CurrentSource"]
+        for component in circuit_components:
+            btn = QPushButton(component)
+
+            btn.clicked.connect(lambda checked, c=component: self.tool_selected.emit(c))
+            circuits_layout.addWidget(btn)
+
+        circuits_layout.addStretch()
+        self.tool_box.addItem(circuits_page, "Circuit Components")
+
         props_group = QGroupBox("Properties")
         props_layout = QFormLayout()
-        
+
         self.inputs_combo = QComboBox()
         self.inputs_combo.addItems(["2", "3", "4", "5"])
         props_layout.addRow("Inputs:", self.inputs_combo)
-        
+
+        self.value_edit = QLineEdit()
+        props_layout.addRow("Value:", self.value_edit)
+
+
         props_group.setLayout(props_layout)
-        layout.addWidget(props_group)
-        
-        layout.addStretch()
-        self.setLayout(layout)
+        main_layout.addWidget(props_group)
+
+        main_layout.addStretch()
+        # self.setLayout(main_layout)
+
 
 
 class CodeViewer(QWidget):
@@ -1095,10 +1114,8 @@ class LaTeXCircuitDesigner(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Failed to export document: {str(e)}")
                 
     def delete_selected(self):
-        """Delete selected items"""
         selected_items = self.canvas.scene.selectedItems()
         for item in selected_items:
-            # If it's a wire, remove it from connected points
             if isinstance(item, WireItem):
                 if item.start_connection:
                     item.start_connection.remove_wire(item)

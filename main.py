@@ -6,7 +6,6 @@ from logic.gates import LaTeXCircuitDesigner
 class MainApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("LaTeX Circuit Suite")
         self.resize(1200, 800)
 
         self.tabs = QTabWidget()

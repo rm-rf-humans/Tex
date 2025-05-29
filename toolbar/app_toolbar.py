@@ -13,7 +13,7 @@ class HorizontalActionsToolbar(QToolBar):
         self.addAction(self.select_action)
 
         self.wire_action = QAction("Wire", self.parent_window)
-        self.wire_action.setShortcut('Ctrl+w')
+        self.wire_action.setShortcut('Ctrl+W') # Changed from Ctrl+w for consistency
         self.wire_action.triggered.connect(lambda: self.parent_window.canvas.set_tool("wire"))
         self.addAction(self.wire_action)
 
@@ -51,6 +51,10 @@ class HorizontalActionsToolbar(QToolBar):
         self.addSeparator()
 
         self.delete_action = QAction("Delete", self.parent_window)
-        self.delete_action.setShortcut('Delete')
+        self.delete_action.setShortcut('Delete') # Standard shortcut
         self.delete_action.triggered.connect(self.parent_window.delete_selected)
         self.addAction(self.delete_action)
+
+        self.rotate_action = QAction("Rotate Gate", self.parent_window) # New Action
+        self.rotate_action.setShortcut('Ctrl+R')
+        self.addAction(self.rotate_action)

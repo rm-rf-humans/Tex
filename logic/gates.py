@@ -9,11 +9,11 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QFormLayout, QComboBox, QGraphicsEllipseItem, QGraphicsPolygonItem,
                              QGraphicsPathItem, QGridLayout, QFrame)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal, QTimer, QPointF, QLineF
-from PyQt5.QtGui import QPen, QBrush, QColor, QFont, QPainter, QPixmap, QPolygonF, QPainterPath, QPainterPathStroker
+from PyQt5.QtGui import QPen, QBrush, QColor, QFont, QPainter, QPixmap, QPolygonF, QPainterPath, QPainterPathStroker, QTransform
 from pylatex import Document, TikZ, Command
 from pylatex.tikz import TikZNode, TikZDraw
-    
-    
+
+
 from rulers import RulerManager
 from toolbar.app_toolbar import HorizontalActionsToolbar
 
@@ -344,8 +344,9 @@ class CircuitCanvas(QGraphicsView):
             if gate in gate_id_map:
                 gate_id = gate_id_map[gate]
                 if connection.point_type == 'output':
-                    return f"{gate_id}.output"
-                else:
+                    return f"{gate_id}.output" # Default output anchor
+                else: # input
+                    # Default input anchor. TikZ gates handle multiple inputs with 'input 1', 'input 2' etc.
                     return f"{gate_id}.input {connection.index + 1}"
         return None
     
@@ -381,7 +382,7 @@ class CircuitCanvas(QGraphicsView):
             # Add gates
             for gate in gates:
                 gate_id = gate_id_map[gate]
-                x, y = gate.pos().x() / 50, -gate.pos().y() / 50
+                x, y = gate.pos().x() / 50, -gate.pos().y() / 50 # TikZ uses a different y-axis direction
                 
                 tikz_gates = {
                     "AND": "and gate US",
@@ -395,9 +396,10 @@ class CircuitCanvas(QGraphicsView):
                 
                 gate_name = tikz_gates.get(gate.gate_type, "and gate US")
                 inputs_spec = f", inputs={gate.num_inputs}" if gate.num_inputs > 2 else ""
+                rotation_spec = f", rotate={gate.angle}" if gate.angle != 0 else "" # Add rotation
                 
                 tikz.append(Command('node', 
-                                  options=[f'{gate_name}, draw{inputs_spec}'],
+                                  options=[f'{gate_name}, draw{inputs_spec}{rotation_spec}'],
                                   arguments=[f'({gate_id})'],
                                   extra_arguments=f'at ({x:.2f}, {y:.2f}) {{}}'))
             
@@ -542,6 +544,7 @@ class GateItem(QGraphicsItem):
         # Gate dimensions
         self.width = 80
         self.height = 60
+        self.angle = 0 # Angle for rotation
         
         # Connection points
         self.input_points = []
@@ -549,49 +552,136 @@ class GateItem(QGraphicsItem):
         
         self.create_connection_points()
         
-    def create_connection_points(self):
-        """Create input and output connection points"""
-        # Clear existing points
+    def rotate_gate(self):
+        self.angle = (self.angle + 90) % 360
+        self.prepareGeometryChange() # Notify that geometry is changing
+        
         for point in self.input_points + self.output_points:
             if point.scene():
                 point.scene().removeItem(point)
-        
+            del point # Ensure cleanup
+        self.input_points.clear()
+        self.output_points.clear()
+        self.create_connection_points()
+        self.update_connected_wires() # Wires need to redraw
+        self.update() # Request a repaint
+
+    def create_connection_points(self):
+        for point in self.input_points + self.output_points:
+            if point.scene(): # Ensure it's in a scene before trying to remove
+                point.scene().removeItem(point)
         self.input_points = []
         self.output_points = []
-        
-        input_x_offset = -12
-        
-        # Create input points (left side)
-        if self.num_inputs == 2:
 
-            y_positions_for_two_inputs = [-5.0, 5.0]
+        input_x_offset = -12 # Default x for inputs (left side)
+        output_x_offset = self.width + 10 # Default x for output (right side)
+
+        # Calculate positions in default orientation
+        default_input_positions = []
+        if self.num_inputs == 2:
+            y_positions_for_two_inputs = [-15.0, 15.0] # Increased spacing a bit
+            for y_pos in y_positions_for_two_inputs:
+                default_input_positions.append(QPointF(input_x_offset, y_pos))
+        elif self.num_inputs == 1: # e.g. NOT gate
+             default_input_positions.append(QPointF(input_x_offset, 0))
+        else: # General case for more inputs
+            input_spacing = self.height / (self.num_inputs + 1)
             for i in range(self.num_inputs):
-                y_pos = y_positions_for_two_inputs[i]
-                point = ConnectionPoint(self, 'input', i, input_x_offset, y_pos)
-                self.input_points.append(point)
+                y_pos = input_spacing * (i + 1) - self.height / 2
+                default_input_positions.append(QPointF(input_x_offset, y_pos))
+        
+        default_output_positions = [QPointF(output_x_offset, 0)]
+
+        # Rotation transform for connection points
+        # Points should rotate around the gate's rotation center: (self.width / 2, 0)
+        transform = QTransform()
+        transform.translate(self.width / 2, 0) # Move to rotation center
+        transform.rotate(self.angle)           # Rotate
+        transform.translate(-self.width / 2, 0)# Move back
+
+        for i, pos in enumerate(default_input_positions):
+            rotated_pos = transform.map(pos)
+            point = ConnectionPoint(self, 'input', i, rotated_pos.x(), rotated_pos.y())
+            self.input_points.append(point)
+
+        for i, pos in enumerate(default_output_positions):
+            rotated_pos = transform.map(pos)
+            point = ConnectionPoint(self, 'output', i, rotated_pos.x(), rotated_pos.y())
+            self.output_points.append(point)
+
+    def boundingRect(self):
+        
+        core_rect = QRectF(0, -self.height / 2, self.width, self.height)
+        
+        min_x, max_x = core_rect.left(), core_rect.right()
+        min_y, max_y = core_rect.top(), core_rect.bottom()
+
+        # Temporarily create unrotated points to find their extent
+        temp_input_x_offset = -12
+        temp_output_x_offset = self.width + 10
+        
+        unrotated_points_coords = []
+        if self.num_inputs == 2:
+            y_positions_for_two_inputs = [-15.0, 15.0]
+            for y_pos in y_positions_for_two_inputs:
+                unrotated_points_coords.append(QPointF(temp_input_x_offset, y_pos))
+        elif self.num_inputs == 1:
+            unrotated_points_coords.append(QPointF(temp_input_x_offset, 0))
         else:
             input_spacing = self.height / (self.num_inputs + 1)
             for i in range(self.num_inputs):
-                y_pos = input_spacing * (i + 1) - self.height/2
-                point = ConnectionPoint(self, 'input', i, -10, y_pos) 
-                self.input_points.append(point)
-        
-        output_point = ConnectionPoint(self, 'output', 0, self.width + 10, 0)
-        self.output_points.append(output_point)
+                y_pos = input_spacing * (i + 1) - self.height / 2
+                unrotated_points_coords.append(QPointF(temp_input_x_offset, y_pos))
+        unrotated_points_coords.append(QPointF(temp_output_x_offset, 0))
 
-    def boundingRect(self):
-        return QRectF(-20, -self.height/2 - 10, self.width + 40, self.height + 20)
-    
+        for p in unrotated_points_coords:
+            min_x = min(min_x, p.x())
+            max_x = max(max_x, p.x())
+            min_y = min(min_y, p.y())
+            max_y = max(max_y, p.y())
+            
+        # This is the bounding rect of the gate and its pins before rotation, relative to item's (0,0)
+        base_brect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
+
+        # Now, transform this base_brect by the current rotation around (self.width/2, 0)
+        transform = QTransform()
+        transform.translate(self.width / 2, 0) # To rotation center
+        transform.rotate(self.angle)            # Rotate
+        transform.translate(-self.width / 2, 0) # Back from rotation center
+        
+        # Map the four corners of the base_brect and find the new min/max
+        p1 = transform.map(base_brect.topLeft())
+        p2 = transform.map(base_brect.topRight())
+        p3 = transform.map(base_brect.bottomLeft())
+        p4 = transform.map(base_brect.bottomRight())
+
+        final_min_x = min(p1.x(), p2.x(), p3.x(), p4.x())
+        final_max_x = max(p1.x(), p2.x(), p3.x(), p4.x())
+        final_min_y = min(p1.y(), p2.y(), p3.y(), p4.y())
+        final_max_y = max(p1.y(), p2.y(), p3.y(), p4.y())
+        
+        # Add a small padding for selection outlines, etc.
+        padding = 5 
+        return QRectF(final_min_x - padding, final_min_y - padding, 
+                      (final_max_x - final_min_x) + 2 * padding, 
+                      (final_max_y - final_min_y) + 2 * padding)
+
     def paint(self, painter, option, widget):
         painter.setRenderHint(QPainter.Antialiasing)
         
-        # Set pen and brush
         pen = QPen(QColor(0, 0, 0), 2)
         if self.isSelected():
-            pen.setColor(QColor(255, 0, 0))
+            pen.setColor(QColor(255, 0, 0)) # Highlight selected item
         painter.setPen(pen)
-        painter.setBrush(QBrush(QColor(255, 255, 255)))
+        painter.setBrush(QBrush(QColor(255, 255, 255))) # Gate body color
+
+        painter.save() # Save painter state
+
         
+        painter.translate(self.width / 2, 0) # Move origin to rotation center
+        painter.rotate(self.angle)           # Rotate
+        painter.translate(-self.width / 2, 0) # Move origin back
+
         # Draw gate shape based on type
         if self.gate_type == "AND":
             self.draw_and_gate(painter)
@@ -601,16 +691,18 @@ class GateItem(QGraphicsItem):
             self.draw_not_gate(painter)
         elif self.gate_type == "NAND":
             self.draw_and_gate(painter)
-            self.draw_negation_circle(painter, self.width, 0)
+            self.draw_negation_circle(painter, self.width, 0) # Circle at output
         elif self.gate_type == "NOR":
             self.draw_or_gate(painter)
-            self.draw_negation_circle(painter, self.width, 0)
+            self.draw_negation_circle(painter, self.width, 0) # Circle at output
         elif self.gate_type == "XOR":
             self.draw_xor_gate(painter)
         elif self.gate_type == "XNOR":
             self.draw_xor_gate(painter)
-            self.draw_negation_circle(painter, self.width, 0)
-    
+            self.draw_negation_circle(painter, self.width, 0) # Circle at output
+        
+        painter.restore() # Restore painter state (removes rotation for other items)
+
     def draw_and_gate(self, painter):
         """Draw AND gate shape"""
         path = QPainterPath()
@@ -624,42 +716,41 @@ class GateItem(QGraphicsItem):
     def draw_or_gate(self, painter):
         """Draw OR gate shape"""
         path = QPainterPath()
-        # Left curved side
         path.moveTo(0, -self.height/2)
-        path.quadTo(self.width/4, -self.height/4, self.width/4, 0)
-        path.quadTo(self.width/4, self.height/4, 0, self.height/2)
-        # Right curved side
-        path.quadTo(self.width/2, self.height/4, self.width, 0)
-        path.quadTo(self.width/2, -self.height/4, 0, -self.height/2)
+        path.quadTo(self.width/4, -self.height/4, self.width/4, 0) # Inner curve control point 1
+        path.quadTo(self.width/4, self.height/4, 0, self.height/2)  # Inner curve control point 2
+        
+        path.quadTo(self.width * 0.6, self.height/2 * 0.7, self.width, 0) # Top outer curve
+        path.quadTo(self.width * 0.6, -self.height/2 * 0.7, 0, -self.height/2) # Bottom outer curve
         painter.drawPath(path)
-    
+
     def draw_xor_gate(self, painter):
         """Draw XOR gate shape"""
-        # Draw OR gate
-        self.draw_or_gate(painter)
-        # Add extra arc on the left
-        path = QPainterPath()
-        path.moveTo(-8, -self.height/2)
-        path.quadTo(-4, 0, -8, self.height/2)
-        painter.drawPath(path)
+        self.draw_or_gate(painter) # Draw OR shape first
+        
+        extra_arc_path = QPainterPath()
+        
+        arc_x_offset = -8
+        extra_arc_path.moveTo(arc_x_offset, -self.height/2)
+        extra_arc_path.quadTo(arc_x_offset + self.width/8, -self.height/4, arc_x_offset + self.width/8, 0)
+        extra_arc_path.quadTo(arc_x_offset + self.width/8, self.height/4, arc_x_offset, self.height/2)
+        painter.drawPath(extra_arc_path)
     
     def draw_not_gate(self, painter):
         """Draw NOT gate shape (triangle with circle)"""
-        # Triangle
         triangle = QPolygonF([
-            QPointF(0, -self.height/2),
-            QPointF(0, self.height/2),
-            QPointF(self.width - 10, 0)
+            QPointF(0, -self.height/2 * 0.6), # Make triangle a bit smaller
+            QPointF(0, self.height/2 * 0.6),
+            QPointF(self.width - 10, 0) # Point of triangle before circle
         ])
         painter.drawPolygon(triangle)
-        
-        # Negation circle
-        self.draw_negation_circle(painter, self.width - 10, 0)
+        self.draw_negation_circle(painter, self.width - 10, 0) # Circle at output of triangle
     
     def draw_negation_circle(self, painter, x, y):
-        """Draw negation circle at specified position"""
-        painter.drawEllipse(QPointF(x, y), 5, 5)
-    
+        
+        circle_radius = 5
+        painter.drawEllipse(QPointF(x, y), circle_radius, circle_radius)
+
     def itemChange(self, change, value):
         """Handle item changes (like position changes)"""
         if change == QGraphicsItem.ItemPositionChange:
@@ -675,23 +766,19 @@ class GateItem(QGraphicsItem):
     
     def get_tikz_code(self, gate_id):
         """Generate TikZ code for this gate"""
-        x, y = self.pos().x() / 50, -self.pos().y() / 50
+        x, y = self.pos().x() / 50, -self.pos().y() / 50 # TikZ y-axis is inverted
         
-        # Map gate types to TikZ library names
         tikz_gates = {
-            "AND": "and gate US",
-            "OR": "or gate US", 
-            "NOT": "not gate US",
-            "NAND": "nand gate US",
-            "NOR": "nor gate US",
-            "XOR": "xor gate US",
+            "AND": "and gate US", "OR": "or gate US", "NOT": "not gate US",
+            "NAND": "nand gate US", "NOR": "nor gate US", "XOR": "xor gate US",
             "XNOR": "xnor gate US"
         }
-        
         gate_name = tikz_gates.get(self.gate_type, "and gate US")
         inputs_spec = f", inputs={self.num_inputs}" if self.num_inputs > 2 else ""
+        # Add rotation to TikZ node if angle is not 0
+        rotation_spec = f", rotate={self.angle}" if self.angle != 0 else ""
         
-        return f"    \\node[{gate_name}, draw{inputs_spec}] ({gate_id}) at ({x:.2f}, {y:.2f}) {{}};"
+        return f"    \\node[{gate_name}, draw{inputs_spec}{rotation_spec}] ({gate_id}) at ({x:.2f}, {y:.2f}) {{}};"
 
 
 class WireItem(QGraphicsItem):
@@ -720,16 +807,24 @@ class WireItem(QGraphicsItem):
         start_pos = self.start_connection.get_scene_pos()
         end_pos = self.end_connection.get_scene_pos()
         
+        local_start_pos = self.mapFromScene(start_pos)
+        local_end_pos = self.mapFromScene(end_pos)
+
         # Add some padding for selection
         padding = 5
-        return QRectF(start_pos, end_pos).normalized().adjusted(-padding, -padding, padding, padding)
-    
+        return QRectF(local_start_pos, local_end_pos).normalized().adjusted(-padding, -padding, padding, padding)
+
     def paint(self, painter, option, widget):
         if not (self.start_connection and self.end_connection):
             return
             
-        start_pos = self.mapFromScene(self.start_connection.get_scene_pos())
-        end_pos = self.mapFromScene(self.end_connection.get_scene_pos())
+        # Get scene positions from connection points
+        start_pos_scene = self.start_connection.get_scene_pos()
+        end_pos_scene = self.end_connection.get_scene_pos()
+
+        # Map to local coordinates for drawing
+        start_pos_local = self.mapFromScene(start_pos_scene)
+        end_pos_local = self.mapFromScene(end_pos_scene)
         
         # Set pen based on selection state
         width = self.selected_width if self.isSelected() else self.wire_width
@@ -738,33 +833,37 @@ class WireItem(QGraphicsItem):
         
         # Draw the wire with antialiasing
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.drawLine(start_pos, end_pos)
-    
+        painter.drawLine(start_pos_local, end_pos_local)
+
     def shape(self):
         """Define the shape for better mouse interaction"""
         if not (self.start_connection and self.end_connection):
             return QPainterPath()
         
-        start_pos = self.mapFromScene(self.start_connection.get_scene_pos())
-        end_pos = self.mapFromScene(self.end_connection.get_scene_pos())
+        start_pos_scene = self.start_connection.get_scene_pos()
+        end_pos_scene = self.end_connection.get_scene_pos()
+
+        start_pos_local = self.mapFromScene(start_pos_scene)
+        end_pos_local = self.mapFromScene(end_pos_scene)
         
         path = QPainterPath()
         
-        # Create a thick line path for easier selection
-        pen = QPen(QColor(0, 0, 0), 8)  # Thick invisible selection area
         stroker = QPainterPathStroker()
-        stroker.setWidth(pen.widthF())
-        
+        stroker.setWidth(max(10, self.wire_width + 5)) # Make selection area a bit wider than the wire
+        stroker.setCapStyle(Qt.RoundCap) # Makes ends easier to click
+
         line_path = QPainterPath()
-        line_path.moveTo(start_pos)
-        line_path.lineTo(end_pos)
+        line_path.moveTo(start_pos_local)
+        line_path.lineTo(end_pos_local)
         
         return stroker.createStroke(line_path)
-    
+
     def update_position(self):
         """Update wire position when connected gates move"""
-        self.prepareGeometryChange()
-        self.update()
+        self.prepareGeometryChange() # Important for QGraphicsItem when geometry changes
+        if self.scene():
+            self.scene().update(self.sceneBoundingRect()) # Update the region of the scene this wire occupies
+        self.update() # Request repaint of the item itself
     
     def get_tikz_code(self, start_ref, end_ref):
         """Generate TikZ code for this wire"""
@@ -777,33 +876,40 @@ class PreviewWire(QGraphicsItem):
     def __init__(self, start_point, mouse_pos):
         super().__init__()
         self.start_point = start_point
-        self.end_pos = mouse_pos
+        self.end_pos = mouse_pos # This is in scene coordinates
         self.setZValue(-1)  # Draw behind other items
     
     def boundingRect(self):
         if not self.start_point:
             return QRectF()
         
-        start_pos = self.start_point.get_scene_pos()
-        return QRectF(start_pos, self.end_pos).normalized().adjusted(-2, -2, 2, 2)
-    
+        start_pos_scene = self.start_point.get_scene_pos()
+        local_start = self.mapFromScene(start_pos_scene)
+        local_end = self.mapFromScene(self.end_pos)
+
+        return QRectF(local_start, local_end).normalized().adjusted(-2, -2, 2, 2)
+
     def paint(self, painter, option, widget):
         if not self.start_point:
             return
         
-        start_pos = self.mapFromScene(self.start_point.get_scene_pos())
-        end_pos = self.mapFromScene(self.end_pos)
+        start_pos_scene = self.start_point.get_scene_pos()
+        end_pos_scene = self.end_pos # Already in scene coordinates
+
+        # Map to local for drawing
+        start_pos_local = self.mapFromScene(start_pos_scene)
+        end_pos_local = self.mapFromScene(end_pos_scene)
         
         # Draw dashed preview line
         pen = QPen(QColor(100, 100, 100), 2, Qt.DashLine)
         painter.setPen(pen)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.drawLine(start_pos, end_pos)
+        painter.drawLine(start_pos_local, end_pos_local)
     
-    def update_end_pos(self, pos):
+    def update_end_pos(self, scene_pos): # scene_pos is the new mouse position in scene coords
         """Update the end position of the preview wire"""
         self.prepareGeometryChange()
-        self.end_pos = pos
+        self.end_pos = scene_pos # Store new scene coordinate
         self.update()
 
 
@@ -1026,12 +1132,36 @@ class LaTeXCircuitDesigner(QMainWindow):
 
             edit_menu = menubar.addMenu('Edit')
             edit_menu.addAction(self.main_toolbar.delete_action)
+            if hasattr(self.main_toolbar, 'rotate_action'): # Add rotate action to menu
+                edit_menu.addAction(self.main_toolbar.rotate_action)
+
 
     def setup_connections(self):
         """Setup signal connections"""
         self.tool_panel.tool_selected.connect(self.canvas.set_tool)
         self.code_viewer.export_pdf_requested = self.export_pdf
+        # Connect the new rotate action if it exists on the toolbar
+        if hasattr(self.main_toolbar, 'rotate_action'):
+            self.main_toolbar.rotate_action.triggered.connect(self.rotate_selected_gate)
+
+    def rotate_selected_gate(self):
+        selected_items = self.canvas.scene.selectedItems()
+        if not selected_items:
+            QMessageBox.information(self, "Rotate Gate", "No gate selected.")
+            return
         
+        rotated_any = False
+        for item in selected_items:
+            if isinstance(item, GateItem):
+                item.rotate_gate()
+                rotated_any = True
+        
+        if rotated_any:
+            self.update_code() # Update TikZ code if a gate was rotated
+            self.canvas.scene.update() # Ensure scene redraws
+        else:
+            QMessageBox.information(self, "Rotate Gate", "Selected item is not a rotatable gate.")
+
     def new_circuit(self):
         """Create a new circuit"""
         self.canvas.scene.clear()
@@ -1088,13 +1218,42 @@ class LaTeXCircuitDesigner(QMainWindow):
     def delete_selected(self):
         selected_items = self.canvas.scene.selectedItems()
         for item in selected_items:
-            if isinstance(item, WireItem):
+            # If item is a GateItem, also remove its connection points
+            if isinstance(item, GateItem):
+                for cp in item.input_points + item.output_points:
+                    # Remove wires connected to this connection point
+                    for wire in list(cp.connected_wires): # Iterate over a copy
+                        if wire.scene():
+                            wire.scene().removeItem(wire)
+                        # Clean up references in other connection point/junction
+                        if wire.start_connection == cp and wire.end_connection:
+                            wire.end_connection.remove_wire(wire)
+                        elif wire.end_connection == cp and wire.start_connection:
+                            wire.start_connection.remove_wire(wire)
+                    if cp.scene():
+                        cp.scene().removeItem(cp)
+                item.input_points.clear()
+                item.output_points.clear()
+
+            elif isinstance(item, WireItem):
                 if item.start_connection:
                     item.start_connection.remove_wire(item)
                 if item.end_connection:
                     item.end_connection.remove_wire(item)
             
-            self.canvas.scene.removeItem(item)
+            # For JunctionPoint, remove connected wires
+            elif isinstance(item, JunctionPoint):
+                for wire in list(item.connected_wires): # Iterate over a copy
+                    if wire.scene():
+                        wire.scene().removeItem(wire)
+                     # Clean up references in other connection point/junction
+                    if wire.start_connection == item and wire.end_connection:
+                        wire.end_connection.remove_wire(wire)
+                    elif wire.end_connection == item and wire.start_connection:
+                        wire.start_connection.remove_wire(wire)
+            
+            if item.scene(): # Ensure item is still in scene before removing
+                 self.canvas.scene.removeItem(item)
         self.update_code()
         
     def update_code(self):

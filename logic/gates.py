@@ -567,47 +567,34 @@ class GateItem(QGraphicsItem):
         self.update() # Request a repaint
 
     def create_connection_points(self):
+        """Create input and output connection points"""
+        # Clear existing points
         for point in self.input_points + self.output_points:
-            if point.scene(): # Ensure it's in a scene before trying to remove
+            if point.scene():
                 point.scene().removeItem(point)
+        
         self.input_points = []
         self.output_points = []
-
-        input_x_offset = -12 # Default x for inputs (left side)
-        output_x_offset = self.width + 10 # Default x for output (right side)
-
-        # Calculate positions in default orientation
-        default_input_positions = []
+        
+        input_x_offset = -12 # Was -10
+        
+        # Create input points (left side)
         if self.num_inputs == 2:
-            y_positions_for_two_inputs = [-15.0, 15.0] # Increased spacing a bit
-            for y_pos in y_positions_for_two_inputs:
-                default_input_positions.append(QPointF(input_x_offset, y_pos))
-        elif self.num_inputs == 1: # e.g. NOT gate
-             default_input_positions.append(QPointF(input_x_offset, 0))
-        else: # General case for more inputs
+            y_positions_for_two_inputs = [-5.0, 5.0]
+            for i in range(self.num_inputs):
+                y_pos = y_positions_for_two_inputs[i]
+                point = ConnectionPoint(self, 'input', i, input_x_offset, y_pos)
+                self.input_points.append(point)
+        else:
             input_spacing = self.height / (self.num_inputs + 1)
             for i in range(self.num_inputs):
-                y_pos = input_spacing * (i + 1) - self.height / 2
-                default_input_positions.append(QPointF(input_x_offset, y_pos))
+                y_pos = input_spacing * (i + 1) - self.height/2
+             
+                point = ConnectionPoint(self, 'input', i, -10, y_pos) 
+                self.input_points.append(point)
         
-        default_output_positions = [QPointF(output_x_offset, 0)]
-
-        # Rotation transform for connection points
-        # Points should rotate around the gate's rotation center: (self.width / 2, 0)
-        transform = QTransform()
-        transform.translate(self.width / 2, 0) # Move to rotation center
-        transform.rotate(self.angle)           # Rotate
-        transform.translate(-self.width / 2, 0)# Move back
-
-        for i, pos in enumerate(default_input_positions):
-            rotated_pos = transform.map(pos)
-            point = ConnectionPoint(self, 'input', i, rotated_pos.x(), rotated_pos.y())
-            self.input_points.append(point)
-
-        for i, pos in enumerate(default_output_positions):
-            rotated_pos = transform.map(pos)
-            point = ConnectionPoint(self, 'output', i, rotated_pos.x(), rotated_pos.y())
-            self.output_points.append(point)
+        output_point = ConnectionPoint(self, 'output', 0, self.width + 10, 0)
+        self.output_points.append(output_point)
 
     def boundingRect(self):
         

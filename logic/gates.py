@@ -559,17 +559,26 @@ class GateItem(QGraphicsItem):
         self.input_points = []
         self.output_points = []
         
-        # Create input points (left side)
-        input_spacing = self.height / (self.num_inputs + 1)
-        for i in range(self.num_inputs):
-            y_pos = input_spacing * (i + 1) - self.height/2
-            point = ConnectionPoint(self, 'input', i, -10, y_pos)
-            self.input_points.append(point)
+        input_x_offset = -12
         
-        # Create output point (right side)
+        # Create input points (left side)
+        if self.num_inputs == 2:
+
+            y_positions_for_two_inputs = [-5.0, 5.0]
+            for i in range(self.num_inputs):
+                y_pos = y_positions_for_two_inputs[i]
+                point = ConnectionPoint(self, 'input', i, input_x_offset, y_pos)
+                self.input_points.append(point)
+        else:
+            input_spacing = self.height / (self.num_inputs + 1)
+            for i in range(self.num_inputs):
+                y_pos = input_spacing * (i + 1) - self.height/2
+                point = ConnectionPoint(self, 'input', i, -10, y_pos) 
+                self.input_points.append(point)
+        
         output_point = ConnectionPoint(self, 'output', 0, self.width + 10, 0)
         self.output_points.append(output_point)
-    
+
     def boundingRect(self):
         return QRectF(-20, -self.height/2 - 10, self.width + 40, self.height + 20)
     

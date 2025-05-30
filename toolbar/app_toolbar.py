@@ -8,7 +8,7 @@ class HorizontalActionsToolbar(QToolBar):
 
     def _create_actions(self):
         self.select_action = QAction("Select", self.parent_window)
-        self.select_action.setShortcut('Ctrl+Shift+S')
+        self.select_action.setShortcut('Ctrl+A')
         self.select_action.triggered.connect(lambda: self.parent_window.canvas.set_tool("select"))
         self.addAction(self.select_action)
 

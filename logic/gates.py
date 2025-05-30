@@ -488,7 +488,8 @@ class JunctionPoint(QGraphicsEllipseItem):
     
     def get_scene_pos(self):
         """Get the absolute scene position of this junction point"""
-        return self.mapToScene(self.boundingRect().center())
+        # return self.mapToScene(self.boundingRect().center())
+        return self.mapToScene(QPointF(0, 0))
     
     def add_wire(self, wire):
         """Add a wire connected to this point"""
@@ -601,6 +602,14 @@ class GateItem(QGraphicsItem):
         self.create_connection_points()
         self.update_connected_wires() # Wires need to redraw
         self.update() # Request a repaint
+    
+    def get_rotation_transform(self):
+        """Get the rotation transform used for this gate"""
+        transform = QTransform()
+        transform.translate(self.width / 2, 0)  # To rotation center
+        transform.rotate(self.angle)            # Rotate
+        transform.translate(-self.width / 2, 0) # Back from rotation center
+        return transform
 
     def create_connection_points(self):
         """Create input and output connection points"""
@@ -612,6 +621,8 @@ class GateItem(QGraphicsItem):
         self.input_points = []
         self.output_points = []
         
+        transform = self.get_rotation_transform()
+
         input_x_offset = -12 # Was -10
         
         # Create input points (left side)
@@ -619,17 +630,24 @@ class GateItem(QGraphicsItem):
             y_positions_for_two_inputs = [-5.0, 5.0]
             for i in range(self.num_inputs):
                 y_pos = y_positions_for_two_inputs[i]
-                point = ConnectionPoint(self, 'input', i, input_x_offset, y_pos)
+                # Apply rotation to the point position
+                original_pos = QPointF(input_x_offset, y_pos)
+                rotated_pos = transform.map(original_pos)
+                point = ConnectionPoint(self, 'input', i, rotated_pos.x(), rotated_pos.y())
                 self.input_points.append(point)
         else:
             input_spacing = self.height / (self.num_inputs + 1)
             for i in range(self.num_inputs):
                 y_pos = input_spacing * (i + 1) - self.height/2
-             
-                point = ConnectionPoint(self, 'input', i, -10, y_pos) 
+
+                original_pos = QPointF(-10, y_pos)
+                rotated_pos = transform.map(original_pos)
+                point = ConnectionPoint(self, 'input', i, rotated_pos.x(), rotated_pos.y())
                 self.input_points.append(point)
         
-        output_point = ConnectionPoint(self, 'output', 0, self.width + 10, 0)
+        original_output_pos = QPointF(self.width, 0)
+        rotated_output_pos = transform.map(original_output_pos)
+        output_point = ConnectionPoint(self, 'output', 0, rotated_output_pos.x(), rotated_output_pos.y())
         self.output_points.append(output_point)
 
     def boundingRect(self):
@@ -666,12 +684,14 @@ class GateItem(QGraphicsItem):
         # This is the bounding rect of the gate and its pins before rotation, relative to item's (0,0)
         base_brect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
 
-        # Now, transform this base_brect by the current rotation around (self.width/2, 0)
-        transform = QTransform()
-        transform.translate(self.width / 2, 0) # To rotation center
-        transform.rotate(self.angle)            # Rotate
-        transform.translate(-self.width / 2, 0) # Back from rotation center
+        # # Now, transform this base_brect by the current rotation around (self.width/2, 0)
+        # transform = QTransform()
+        # transform.translate(self.width / 2, 0) # To rotation center
+        # transform.rotate(self.angle)            # Rotate
+        # transform.translate(-self.width / 2, 0) # Back from rotation center
         
+        transform = self.get_rotation_transform()
+
         # Map the four corners of the base_brect and find the new min/max
         p1 = transform.map(base_brect.topLeft())
         p2 = transform.map(base_brect.topRight())

@@ -42,6 +42,7 @@ class CircuitCanvas(QGraphicsView):
         self.setMouseTracking(True)
 
         self.shift_pressed = False
+        self.shift_ctrl_pressed = False
 
         self.grid_size = 25  
         self.snap_to_grid_enabled = True  # Renamed to avoid conflict
@@ -137,18 +138,34 @@ class CircuitCanvas(QGraphicsView):
                     if self.shift_pressed:
                         dx = scene_pos.x() - start_pos.x()
                         dy = scene_pos.y() - start_pos.y()
-
-                        final_junction_pos = QPointF()
                         if abs(dx) > abs(dy):
                             #temp_pos_for_x_snap = QPointF(scene_pos.x(), start_pos.y())
                             #snapped_temp_pos = self.snap_position_to_grid(temp_pos_for_x_snap)
                             final_junction_pos = QPointF(scene_pos.x(), start_pos.y())
+                            if self.shift_ctrl_pressed:
+                                final_junction_pos = self.snap_position_to_grid(final_junction_pos)
+
                         else:
                             #temp_pos_for_y_snap = QPointF(start_pos.x(), scene_pos.y())
-                            #snapped_temp_pos = scene_pos
-                            final_junction_pos = QPointF(start_pos.x(), scene_pos.y())
-                        
+                            #snapped_pos = self.snap_position_to_grid(scene_pos)
+                            final_junction_pos = QPointF(start_pos.x(), scene_pos.y())                            
+                            if self.shift_ctrl_pressed:
+                                final_junction_pos = self.snap_position_to_grid(final_junction_pos)
+                
                         junction = JunctionPoint(final_junction_pos.x(), final_junction_pos.y())
+                    
+                    # elif self.shift_ctrl_pressed:
+                    #     # start_pos = self.start_connection_point.scenePos()
+                    #     dx = scene_pos.x() - start_pos.x()
+                    #     dy = scene_pos.y() - start_pos.y()
+                    #     if abs(dx) > abs(dy):
+                    #         junction_pos = QPointF(scene_pos.x(), start_pos.y())
+                    #     else:
+                    #         junction_pos = QPointF(start_pos.x(), scene_pos.y())
+                        
+                    #     junction_pos = self.snap_position_to_grid(junction_pos)
+                    #     junction = JunctionPoint(junction_pos.x(), junction_pos.y())
+
                     else:
                         snapped_pos = scene_pos
                         junction = JunctionPoint(snapped_pos.x(), snapped_pos.y())
@@ -237,10 +254,15 @@ class CircuitCanvas(QGraphicsView):
 
     def keyPressEvent(self, event):
         """Handle key presses"""
+        # modifiers = 
+
         if event.key() == Qt.Key_Escape:
             self.cancel_connection()
         elif event.key() == Qt.Key_Shift:
             self.shift_pressed = True
+        # elif (event.modifiers() & Qt.ShiftModifier) and (event.modifiers() & Qt.ControlModifier):
+        elif event.key() == Qt.Key_Control:
+            self.shift_ctrl_pressed = True
         elif event.key() == Qt.Key_G:
             self.toggle_grid_display()  # G key toggles grid display
         elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
@@ -248,9 +270,14 @@ class CircuitCanvas(QGraphicsView):
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
-        """Handle key releases"""
+        modifiers = event.modifiers()
+
         if event.key() == Qt.Key_Shift:
             self.shift_pressed = False
+            # self.shift_ctrl_pressed = False
+
+        elif event.key() == Qt.Key_Control:
+            self.shift_ctrl_pressed = False
         super().keyReleaseEvent(event)
 
     def is_valid_connection(self, point1, point2):

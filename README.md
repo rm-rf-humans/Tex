@@ -10,6 +10,8 @@ https://github.com/user-attachments/assets/dbaecbd9-bba6-479d-9b57-e355bcf90986
 | Set tool to "wire    | `Ctrl + W`           |
 | Rotate selected gate | `Ctrl + R`           |
 | Toggle grid display  | `Shift + G`          |
+| Wiring Ortho on grids| `Shift + Ctrl`       |
+| Orthogonal wiring    | `Shift`              |
 | Cancel current wire  | `Esc`                |
 
 ## To-Do List

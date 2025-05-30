@@ -3,6 +3,15 @@ I luved doing my digital logic assignments in LaTeX; however, it took me so much
 
 https://github.com/user-attachments/assets/dbaecbd9-bba6-479d-9b57-e355bcf90986
 
+## Shortcuts
+| Action               | Shortcut             |
+| :------------------: | :------------------: |
+| Set tool to "select" | `Ctrl + A`           |
+| Set tool to "wire    | `Ctrl + W`           |
+| Rotate selected gate | `Ctrl + R`           |
+| Toggle grid display  | `Shift + G`          |
+| Cancel current wire  | `Esc`                |
+
 ## To-Do List
 - [ ] Drifitng happens while wiring the outputs
 - [ ] Auto-crossing detection of wires

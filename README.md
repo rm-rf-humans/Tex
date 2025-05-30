@@ -12,3 +12,4 @@ https://github.com/user-attachments/assets/dbaecbd9-bba6-479d-9b57-e355bcf90986
 - [ ] Auto alignment of gates
 - [ ] Completing the "Rulers" functionality
 - [ ] The ability to add text
+- [ ] Multi-wiring from the same Node/Wire

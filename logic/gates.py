@@ -374,6 +374,8 @@ class CircuitCanvas(QGraphicsView):
                     return f"{gate_id}.output" # Default output anchor
                 else: # input
                     # Default input anchor. TikZ gates handle multiple inputs with 'input 1', 'input 2' etc.
+                    if gate_id == "not":
+                        return f"{gate_id}.input"                        
                     return f"{gate_id}.input {connection.index + 1}"
         return None
     

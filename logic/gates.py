@@ -424,9 +424,16 @@ class CircuitCanvas(QGraphicsView):
                 }
                 
                 gate_name = tikz_gates.get(gate.gate_type, "and gate US")
-                inputs_spec = f", inputs={gate.num_inputs}" if gate.num_inputs > 2 else ""
-                rotation_spec = f", rotate={gate.angle}" if gate.angle != 0 else "" # Add rotation
+                inputs_spec = f", inputs={gate.num_inputs}" if gate.num_inputs >= 2 else ""
+             
+                tikz_rotation_angle = gate.angle
+                if gate.angle == 90:
+                    tikz_rotation_angle = 360-90
+                elif gate.angle == 270:
+                    tikz_rotation_angle = 360-270
                 
+                rotation_spec = f", rotate={gate.angle}" if gate.angle != 0 else ""
+                             
                 tikz.append(Command('node', 
                                   options=[f'{gate_name}, draw{inputs_spec}{rotation_spec}'],
                                   arguments=[f'({gate_id})'],
@@ -792,7 +799,12 @@ class GateItem(QGraphicsItem):
         gate_name = tikz_gates.get(self.gate_type, "and gate US")
         inputs_spec = f", inputs={self.num_inputs}" if self.num_inputs > 2 else ""
         # Add rotation to TikZ node if angle is not 0
-        rotation_spec = f", rotate={self.angle}" if self.angle != 0 else ""
+        angle = self.angle
+        if self.angle == 90:
+            angle = 270
+        elif self.angle == 270:
+            angle = 90
+        rotation_spec = f", rotate={angle}" if angle != 0 else ""
         
         return f"    \\node[{gate_name}, draw{inputs_spec}{rotation_spec}] ({gate_id}) at ({x:.2f}, {y:.2f}) {{}};"
 

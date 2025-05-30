@@ -634,7 +634,7 @@ class GateItem(QGraphicsItem):
 
         # Temporarily create unrotated points to find their extent
         temp_input_x_offset = -12
-        temp_output_x_offset = self.width + 10
+        temp_output_x_offset = self.width
         
         unrotated_points_coords = []
         if self.num_inputs == 2:

@@ -212,9 +212,9 @@ class CircuitCanvas(QGraphicsView):
         if hasattr(self, 'ruler_manager') and self.ruler_manager:
             self.ruler_manager.set_guide_snap_enabled(enabled)
 
-    def toggle_grid_snap(self):
-        """Toggle grid snapping on/off"""
-        self.snap_to_grid_enabled = not self.snap_to_grid_enabled
+    # def toggle_grid_snap(self):
+    #     """Toggle grid snapping on/off"""
+    #     self.snap_to_grid_enabled = not self.snap_to_grid_enabled
 
     def toggle_grid_display(self):
         """Toggle grid display on/off"""
@@ -265,8 +265,8 @@ class CircuitCanvas(QGraphicsView):
             self.shift_ctrl_pressed = True
         elif event.key() == Qt.Key_G:
             self.toggle_grid_display()  # G key toggles grid display
-        elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
-            self.toggle_grid_snap()  # Ctrl+S toggles grid snapping
+        # elif event.key() == Qt.Key_S and event.modifiers() == Qt.ControlModifier:
+        #     self.toggle_grid_snap()  # Ctrl+S toggles grid snapping
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):

@@ -14,8 +14,9 @@ https://github.com/user-attachments/assets/dbaecbd9-bba6-479d-9b57-e355bcf90986
 
 ## To-Do List
 - [x] ~~Drifitng happens while wiring the outputs~~
+- [ ] Drifting from the gates' output while wiring in y-direction
 - [ ] Auto-crossing detection of wires
-- [ ] Rotation of gates still buggy (inputs and outputs of the gates do NOT rotate)
+- [x] ~~Rotation of gates still buggy (inputs and outputs of the gates do NOT rotate)~~
 - [ ] More styles, format, and digital components
 - [ ] Zooming in and out
 - [ ] Auto alignment of gates

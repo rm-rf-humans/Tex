@@ -4,6 +4,7 @@ I luved doing my digital logic assignments in LaTeX; however, it took me so much
 https://github.com/user-attachments/assets/dbaecbd9-bba6-479d-9b57-e355bcf90986
 
 ## To-Do List
+- [ ] Drifitng happens while wiring the outputs
 - [ ] Auto-crossing detection of wires
 - [ ] Rotation of gates still buggy (inputs and outputs of the gates do NOT rotate)
 - [ ] More styles, format, and digital components

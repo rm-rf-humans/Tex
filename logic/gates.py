@@ -579,10 +579,13 @@ class GateItem(QGraphicsItem):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         
         # Gate dimensions
-        self.width = 80
-        self.height = 60
+        self.width = 17.5  #Dummy, Important Values
+        self.height = 11
         self.angle = 0 # Angle for rotation
         
+        self.visual_width = 17.5
+        self.visual_height = 11
+
         # Connection points
         self.input_points = []
         self.output_points = []
@@ -606,9 +609,9 @@ class GateItem(QGraphicsItem):
     def get_rotation_transform(self):
         """Get the rotation transform used for this gate"""
         transform = QTransform()
-        transform.translate(self.width / 2, 0)  # To rotation center
+        transform.translate(self.visual_width / 2, 0)  # To rotation center
         transform.rotate(self.angle)            # Rotate
-        transform.translate(-self.width / 2, 0) # Back from rotation center
+        transform.translate(-self.visual_width / 2, 0) # Back from rotation center
         return transform
 
     def create_connection_points(self):
@@ -652,14 +655,14 @@ class GateItem(QGraphicsItem):
 
     def boundingRect(self):
         
-        core_rect = QRectF(0, -self.height / 2, self.width, self.height)
+        core_rect = QRectF(0, -self.visual_height / 2, self.visual_width, self.visual_height)
         
         min_x, max_x = core_rect.left(), core_rect.right()
         min_y, max_y = core_rect.top(), core_rect.bottom()
 
         # Temporarily create unrotated points to find their extent
         temp_input_x_offset = -12
-        temp_output_x_offset = self.width
+        temp_output_x_offset = self.visual_width
         
         unrotated_points_coords = []
         if self.num_inputs == 2:
@@ -721,9 +724,9 @@ class GateItem(QGraphicsItem):
         painter.save() # Save painter state
 
         
-        painter.translate(self.width / 2, 0) # Move origin to rotation center
+        painter.translate(self.visual_width / 2, 0) # Move origin to rotation center
         painter.rotate(self.angle)           # Rotate
-        painter.translate(-self.width / 2, 0) # Move origin back
+        painter.translate(-self.visual_width / 2, 0) # Move origin back
 
         # Draw gate shape based on type
         if self.gate_type == "AND":
@@ -749,10 +752,10 @@ class GateItem(QGraphicsItem):
     def draw_and_gate(self, painter):
         """Draw AND gate shape"""
         path = QPainterPath()
-        path.moveTo(0, -self.height/2)
-        path.lineTo(self.width/2, -self.height/2)
-        path.arcTo(self.width/2 - self.height/2, -self.height/2, self.height, self.height, 90, -180)
-        path.lineTo(0, self.height/2)
+        path.moveTo(0, -self.visual_height/2)
+        path.lineTo(self.visual_width/2, -self.visual_height/2)
+        path.arcTo(self.visual_width/2 - self.visual_height/2, -self.visual_height/2, self.visual_height, self.visual_height, 90, -180)
+        path.lineTo(0, self.visual_height/2)
         path.closeSubpath()
         painter.drawPath(path)
     
